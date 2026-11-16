@@ -13,5 +13,13 @@ class SettingsStore(context: Context) {
     var javaScriptEnabled: Boolean get() = prefs.getBoolean("js", true); set(v) { prefs.edit().putBoolean("js", v).apply() }
     var homepage: String get() = prefs.getString("homepage", UrlNormalizer.NEW_TAB_URL) ?: UrlNormalizer.NEW_TAB_URL
         set(v) { prefs.edit().putString("homepage", v).apply() }
+    var useDynamicColor: Boolean get() = prefs.getBoolean("dynamic_color", true)
+        set(v) { prefs.edit().putBoolean("dynamic_color", v).apply() }
+    var seedIndex: Int get() = prefs.getInt("seed_index", 0)
+        set(v) { prefs.edit().putInt("seed_index", v).apply() }
+    var reduceMotion: Boolean get() = prefs.getBoolean("reduce_motion", false)
+        set(v) { prefs.edit().putBoolean("reduce_motion", v).apply() }
+    var backdropBlur: Boolean get() = prefs.getBoolean("backdrop_blur", true)
+        set(v) { prefs.edit().putBoolean("backdrop_blur", v).apply() }
     fun engine(): SearchEngine = runCatching { SearchEngine.valueOf(searchEngine) }.getOrDefault(SearchEngine.Default)
 }

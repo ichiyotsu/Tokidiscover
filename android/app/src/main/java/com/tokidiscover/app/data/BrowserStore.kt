@@ -16,6 +16,9 @@ class BrowserStore(context: Context) {
         set(v) { prefs.edit().putString("history", JSONArray(v.map { JSONObject().put("id", it.id).put("title", it.title).put("url", it.url).put("visitedAt", it.visitedAt) }).toString()).apply() }
     fun addBookmark(b: Bookmark) { bookmarks = listOf(b) + bookmarks }
     fun removeBookmark(id: String) { bookmarks = bookmarks.filterNot { it.id == id } }
-    fun recordHistory(title: String, url: String, isPrivate: Boolean) { if (isPrivate || url == UrlNormalizer.NEW_TAB_URL) return; history = (listOf(HistoryEntry(title = title.ifBlank { url }, url = url)) + history).take(500) }
+    fun recordHistory(title: String, url: String, isPrivate: Boolean) {
+        if (!TabPrivacy.recordHistory(isPrivate, url)) return
+        history = (listOf(HistoryEntry(title = title.ifBlank { url }, url = url)) + history).take(500)
+    }
     fun clearHistory() { history = emptyList() }
 }

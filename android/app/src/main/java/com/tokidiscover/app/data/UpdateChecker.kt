@@ -1,4 +1,6 @@
 package com.tokidiscover.app.data
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -19,8 +21,14 @@ object UpdateChecker {
         val r = parts(remote); val l = parts(local); for (i in 0 until maxOf(r.size, l.size)) { val a = r.getOrElse(i) { 0 }; val b = l.getOrElse(i) { 0 }; if (a != b) return a > b }
         return remote.contains("beta") && !local.contains("beta") == false && remote != local && remote.substringAfter("-", "") > local.substringAfter("-", "")
     }
-    suspend fun fetchLatestVersion(): String? = runCatching {
-        val c = URL(RELEASES_API).openConnection() as HttpURLConnection
-        c.setRequestProperty("Accept", "application/vnd.github+json"); extractLatestVersion(c.inputStream.bufferedReader().readText())
-    }.getOrNull()
+    suspend fun fetchLatestVersion(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val c = URL(RELEASES_API).openConnection() as HttpURLConnection
+            c.connectTimeout = 8000
+            c.readTimeout = 8000
+            c.setRequestProperty("Accept", "application/vnd.github+json")
+            c.setRequestProperty("User-Agent", "TokiDiscover")
+            extractLatestVersion(c.inputStream.bufferedReader().readText())
+        }.getOrNull()
+    }
 }

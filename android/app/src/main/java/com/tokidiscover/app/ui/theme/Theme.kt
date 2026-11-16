@@ -1,17 +1,65 @@
 package com.tokidiscover.app.ui.theme
+
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
-val LocalDarkTheme = staticCompositionLocalOf { false }
-val lightScheme = lightColorScheme(primary = primaryLight, onPrimary = onPrimaryLight, primaryContainer = primaryContainerLight, onPrimaryContainer = onPrimaryContainerLight, secondary = secondaryLight, onSecondary = onSecondaryLight, secondaryContainer = secondaryContainerLight, onSecondaryContainer = onSecondaryContainerLight, tertiary = tertiaryLight, onTertiary = onTertiaryLight, tertiaryContainer = tertiaryContainerLight, onTertiaryContainer = onTertiaryContainerLight, error = errorLight, onError = onErrorLight, errorContainer = errorContainerLight, onErrorContainer = onErrorContainerLight, background = backgroundLight, onBackground = onBackgroundLight, surface = surfaceLight, onSurface = onSurfaceLight, surfaceVariant = surfaceVariantLight, onSurfaceVariant = onSurfaceVariantLight, outline = outlineLight, outlineVariant = outlineVariantLight, scrim = scrimLight, inverseSurface = inverseSurfaceLight, inverseOnSurface = inverseOnSurfaceLight, inversePrimary = inversePrimaryLight, surfaceDim = surfaceDimLight, surfaceBright = surfaceBrightLight, surfaceContainerLowest = surfaceContainerLowestLight, surfaceContainerLow = surfaceContainerLowLight, surfaceContainer = surfaceContainerLight, surfaceContainerHigh = surfaceContainerHighLight, surfaceContainerHighest = surfaceContainerHighestLight)
-val darkScheme = darkColorScheme(primary = primaryDark, onPrimary = onPrimaryDark, primaryContainer = primaryContainerDark, onPrimaryContainer = onPrimaryContainerDark, secondary = secondaryDark, onSecondary = onSecondaryDark, secondaryContainer = secondaryContainerDark, onSecondaryContainer = onSecondaryContainerDark, tertiary = tertiaryDark, onTertiary = onTertiaryDark, tertiaryContainer = tertiaryContainerDark, onTertiaryContainer = onTertiaryContainerDark, error = errorDark, onError = onErrorDark, errorContainer = errorContainerDark, onErrorContainer = onErrorContainerDark, background = backgroundDark, onBackground = onBackgroundDark, surface = surfaceDark, onSurface = onSurfaceDark, surfaceVariant = surfaceVariantDark, onSurfaceVariant = onSurfaceVariantDark, outline = outlineDark, outlineVariant = outlineVariantDark, scrim = scrimDark, inverseSurface = inverseSurfaceDark, inverseOnSurface = inverseOnSurfaceDark, inversePrimary = inversePrimaryDark, surfaceDim = surfaceDimDark, surfaceBright = surfaceBrightDark, surfaceContainerLowest = surfaceContainerLowestDark, surfaceContainerLow = surfaceContainerLowDark, surfaceContainer = surfaceContainerDark, surfaceContainerHigh = surfaceContainerHighDark, surfaceContainerHighest = surfaceContainerHighestDark)
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.core.view.WindowCompat
+
 enum class ThemeMode { System, Light, Dark }
+
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
+private fun Typography.withFamily(family: androidx.compose.ui.text.font.FontFamily): Typography {
+    fun TextStyle.f() = copy(fontFamily = family)
+    return Typography(
+        displayLarge = displayLarge.f(), displayMedium = displayMedium.f(), displaySmall = displaySmall.f(),
+        headlineLarge = headlineLarge.f(), headlineMedium = headlineMedium.f(), headlineSmall = headlineSmall.f(),
+        titleLarge = titleLarge.f(), titleMedium = titleMedium.f(), titleSmall = titleSmall.f(),
+        bodyLarge = bodyLarge.f(), bodyMedium = bodyMedium.f(), bodySmall = bodySmall.f(),
+        labelLarge = labelLarge.f(), labelMedium = labelMedium.f(), labelSmall = labelSmall.f(),
+    )
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable fun TokiDiscoverTheme(mode: ThemeMode = ThemeMode.System, content: @Composable () -> Unit) {
-    val dark = when (mode) { ThemeMode.System -> isSystemInDarkTheme(); ThemeMode.Light -> false; ThemeMode.Dark -> true }
+@Composable
+fun TokiDiscoverTheme(
+    mode: ThemeMode,
+    useDynamicColor: Boolean,
+    seed: Color,
+    reduceMotion: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val dark = when (mode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val activity = view.context as? Activity ?: return@SideEffect
+            WindowCompat.getInsetsController(activity.window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
     CompositionLocalProvider(LocalDarkTheme provides dark) {
-        MaterialExpressiveTheme(colorScheme = if (dark) darkScheme else lightScheme, shapes = TokiShapes, motionScheme = MotionScheme.expressive(), content = content)
+        MaterialExpressiveTheme(
+            colorScheme = resolveColorScheme(dark, useDynamicColor, seed),
+            motionScheme = if (reduceMotion) MotionScheme.standard() else MotionScheme.expressive(),
+            typography = Typography().withFamily(GoogleSansFamily),
+            content = content,
+        )
     }
 }

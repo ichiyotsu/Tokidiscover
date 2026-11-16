@@ -1,7 +1,8 @@
-# TokiDiscover 设计规范（复刻 Tokinote，禁止改色）
+# TokiDiscover 设计规范
 
-来源：Tokinote `Color/Shape/Glass.kt`、`FloatingNavBar.kt`、`Theme.swift`，与 tokimusic `docs/DESIGN.md` 完全一致。
-三端必须使用同一套 hex（Android Color.kt / iOS TokiPalette / Windows TokiPalette.xaml）。
+Android 0.1.1 起以 TokiUI 为准（`android/tokiui/`，来源私有仓库 ichiyotsu/TokiUI 的 `main`）。Android 使用 Material 3 Expressive、动态取色或语义 token 里的种子色，不在应用代码里手写色板。下面的 Matcha 色值和 TokiShapes 仍是 **iOS / Windows 0.1.0** 的记录，这次没有改这两端。
+
+来源（iOS / Windows）：Tokinote `Color/Shape/Glass.kt`、`FloatingNavBar.kt`、`Theme.swift`，与 tokimusic `docs/DESIGN.md` 当时一致。
 
 ## Matcha 配色（完整色板，48 token）
 
