@@ -13,20 +13,22 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.core.view.WindowCompat
 
 enum class ThemeMode { System, Light, Dark }
 
 val LocalDarkTheme = staticCompositionLocalOf { false }
 
-private fun Typography.withFamily(family: androidx.compose.ui.text.font.FontFamily): Typography {
-    fun TextStyle.f() = copy(fontFamily = family)
+private fun Typography.withTokiType(family: androidx.compose.ui.text.font.FontFamily): Typography {
+    fun TextStyle.bold() = copy(fontFamily = family, fontWeight = FontWeight.Bold)
+    fun TextStyle.regular() = copy(fontFamily = family, fontWeight = FontWeight.Normal)
     return Typography(
-        displayLarge = displayLarge.f(), displayMedium = displayMedium.f(), displaySmall = displaySmall.f(),
-        headlineLarge = headlineLarge.f(), headlineMedium = headlineMedium.f(), headlineSmall = headlineSmall.f(),
-        titleLarge = titleLarge.f(), titleMedium = titleMedium.f(), titleSmall = titleSmall.f(),
-        bodyLarge = bodyLarge.f(), bodyMedium = bodyMedium.f(), bodySmall = bodySmall.f(),
-        labelLarge = labelLarge.f(), labelMedium = labelMedium.f(), labelSmall = labelSmall.f(),
+        displayLarge = displayLarge.bold(), displayMedium = displayMedium.bold(), displaySmall = displaySmall.bold(),
+        headlineLarge = headlineLarge.bold(), headlineMedium = headlineMedium.bold(), headlineSmall = headlineSmall.bold(),
+        titleLarge = titleLarge.bold(), titleMedium = titleMedium.bold(), titleSmall = titleSmall.bold(),
+        bodyLarge = bodyLarge.regular(), bodyMedium = bodyMedium.regular(), bodySmall = bodySmall.regular(),
+        labelLarge = labelLarge.bold(), labelMedium = labelMedium.bold(), labelSmall = labelSmall.bold(),
     )
 }
 
@@ -58,7 +60,7 @@ fun TokiDiscoverTheme(
         MaterialExpressiveTheme(
             colorScheme = resolveColorScheme(dark, useDynamicColor, seed),
             motionScheme = if (reduceMotion) MotionScheme.standard() else MotionScheme.expressive(),
-            typography = Typography().withFamily(GoogleSansFamily),
+            typography = Typography().withTokiType(InterFamily),
             content = content,
         )
     }

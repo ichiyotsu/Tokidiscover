@@ -2,13 +2,14 @@ package com.tokidiscover.app.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -41,7 +42,13 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -56,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -63,7 +71,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -72,6 +79,9 @@ import androidx.compose.material3.DropdownMenu
 import com.tokidiscover.app.data.BrowserTab
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.ui.Dest
+import com.tokidiscover.app.ui.theme.TokiChromeStroke
+import com.tokidiscover.app.ui.theme.TokiScrollChipBackdrop
+import dev.chrisbanes.haze.HazeState
 
 data class NavEntry(val dest: Dest, val icon: ImageVector, val selectedIcon: ImageVector, val label: String)
 
@@ -87,20 +97,34 @@ fun Modifier.pressScale(interaction: MutableInteractionSource, scale: Float = 0.
     return graphicsLayer {
         scaleX = animated
         scaleY = animated
+        clip = true
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OverlayTitle(title: String, overlapped: Boolean, onHeight: (Dp) -> Unit, modifier: Modifier = Modifier) {
+fun LongPressLabel(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+        modifier = modifier,
+        content = content,
+    )
+}
+
+@Composable
+fun OverlayTitle(
+    title: String,
+    overlapped: Boolean,
+    backdropBlur: Boolean,
+    hazeState: HazeState,
+    onHeight: (Dp) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val density = LocalDensity.current
-    val chip by animateColorAsState(
-        if (overlapped) MaterialTheme.colorScheme.primary else Color.Transparent,
-        label = "titleChip",
-    )
-    val content by animateColorAsState(
-        if (overlapped) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        label = "titleContent",
-    )
+    val cover by animateFloatAsState(if (overlapped) 1f else 0f, label = "scrollChip")
+    val shape = RoundedCornerShape(percent = 50)
     Box(
         modifier
             .fillMaxWidth()
@@ -113,16 +137,22 @@ fun OverlayTitle(title: String, overlapped: Boolean, onHeight: (Dp) -> Unit, mod
         Box(
             Modifier
                 .heightIn(min = 56.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(chip)
-                .padding(horizontal = 16.dp),
+                .clip(shape),
             contentAlignment = Alignment.CenterStart,
         ) {
+            TokiScrollChipBackdrop(
+                shape = shape,
+                cover = cover,
+                backdropBlur = backdropBlur,
+                hazeState = hazeState,
+                applyBlur = true,
+                modifier = Modifier.matchParentSize(),
+            )
             Text(
                 title,
+                modifier = Modifier.padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = content,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -137,13 +167,24 @@ fun DiscoverNavBar(
     current: Dest,
     onSelect: (Dest) -> Unit,
     glass: Modifier,
+    solidStroke: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val shape = RoundedCornerShape(percent = 50)
+    val inset = if (solidStroke) TokiChromeStroke.width + TokiChromeStroke.barGap else 8.dp
     Row(
         modifier
-            .clip(RoundedCornerShape(percent = 50))
+            .clipToBounds()
+            .clip(shape)
             .then(glass)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .then(
+                if (solidStroke) {
+                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = inset, vertical = inset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         entries.forEach { entry ->
@@ -158,6 +199,7 @@ private fun NavItem(entry: NavEntry, selected: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val haptic = LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
+    LongPressLabel(entry.label) {
     Row(
         modifier = Modifier
             .height(56.dp)
@@ -192,6 +234,7 @@ private fun NavItem(entry: NavEntry, selected: Boolean, onClick: () -> Unit) {
                 Text(entry.label, style = MaterialTheme.typography.labelLarge, color = scheme.onPrimary, maxLines = 1)
             }
         }
+    }
     }
 }
 
@@ -277,11 +320,15 @@ fun DiscoverOmnibox(
                 }
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack, enabled = tab.canGoBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "后退")
+                    LongPressLabel("后退") {
+                        IconButton(onClick = onBack, enabled = tab.canGoBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "后退")
+                        }
                     }
-                    IconButton(onClick = onForward, enabled = tab.canGoForward) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "前进")
+                    LongPressLabel("前进") {
+                        IconButton(onClick = onForward, enabled = tab.canGoForward) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "前进")
+                        }
                     }
                     if (editing) {
                         androidx.compose.material3.TextField(
@@ -330,11 +377,13 @@ fun DiscoverOmnibox(
                             )
                         }
                     }
-                    IconButton(onClick = onReloadOrStop) {
-                        Icon(
-                            if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
-                            contentDescription = if (loading) "停止" else "刷新",
-                        )
+                    LongPressLabel(if (loading) "停止" else "刷新") {
+                        IconButton(onClick = onReloadOrStop) {
+                            Icon(
+                                if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
+                                contentDescription = if (loading) "停止" else "刷新",
+                            )
+                        }
                     }
                     PageMenu(
                         expanded = menu,
@@ -355,6 +404,8 @@ fun DiscoverOmnibox(
 @Composable
 private fun TabCountButton(tabCount: Int, onTabs: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
+    val label = "标签页，共 $tabCount 个"
+    LongPressLabel(label) {
     Row(
         Modifier
             .height(48.dp)
@@ -365,11 +416,12 @@ private fun TabCountButton(tabCount: Int, onTabs: () -> Unit) {
     ) {
         Icon(
             Icons.Outlined.Tab,
-            contentDescription = "标签页，共 $tabCount 个",
+            contentDescription = label,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(4.dp))
         Text("$tabCount", style = MaterialTheme.typography.labelLarge)
+    }
     }
 }
 
@@ -384,8 +436,10 @@ private fun PageMenu(
     onTranslate: () -> Unit,
 ) {
     Box {
-        IconButton(onClick = { onExpanded(true) }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "页面菜单")
+        LongPressLabel("页面菜单") {
+            IconButton(onClick = { onExpanded(true) }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "页面菜单")
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { onExpanded(false) }) {
             DropdownMenuItem(

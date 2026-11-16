@@ -7,8 +7,8 @@ import androidx.compose.ui.text.font.FontWeight
 import com.tokidiscover.app.R
 
 /**
- * Google Sans Flex, with Noto Sans SC (Source Han Sans) as the Chinese fallback.
- * Sizes and weights stay on the Material type scale; these files only supply the family.
+ * Latin is the official Inter variable font. Han is the official Noto Sans SC
+ * release of Source Han Sans. Both follow the wght axis: body 400, titles and labels 700.
  */
 private fun variableFonts(latin: Int, weight: FontWeight): List<Font> {
     val variation = FontVariation.Settings(FontVariation.weight(weight.weight))
@@ -18,7 +18,7 @@ private fun variableFonts(latin: Int, weight: FontWeight): List<Font> {
     )
 }
 
-val GoogleSansFamily: FontFamily = FontFamily(
-    listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold)
-        .flatMap { variableFonts(R.font.google_sans_flex, it) },
+val InterFamily: FontFamily = FontFamily(
+    listOf(FontWeight.Normal, FontWeight.Bold)
+        .flatMap { variableFonts(R.font.inter, it) },
 )

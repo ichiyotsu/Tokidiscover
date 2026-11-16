@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.ui.BrowserViewModel
+import com.tokidiscover.app.ui.components.LongPressLabel
 
 @Composable
 fun TabsScreen(
@@ -69,8 +70,10 @@ fun TabsScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            IconButton(onClick = { vm.closeTab(tab.id) }) {
-                                Icon(Icons.Filled.Close, contentDescription = "关闭标签")
+                            LongPressLabel("关闭标签") {
+                                IconButton(onClick = { vm.closeTab(tab.id) }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "关闭标签")
+                                }
                             }
                         }
                         Text(

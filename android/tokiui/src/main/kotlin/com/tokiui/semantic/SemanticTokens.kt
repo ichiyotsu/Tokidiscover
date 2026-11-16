@@ -42,6 +42,12 @@ data class SemanticTokens(
     val materialPersistent: String,
     val materialTransient: String,
     val materialFallback: String,
+    val materialLightGlass: String,
+    val materialSolidBar: String,
+    val materialScrollTitle: String,
+    val typeLatin: String,
+    val typeCjk: String,
+    val typeCjkBundledAs: String,
 ) {
     fun palette(darkTheme: Boolean): Map<String, String> = if (darkTheme) dark else light
 
@@ -75,6 +81,12 @@ data class SemanticTokens(
             val type = root.getJSONObject("type")
             val scales = type.getBoolean("scalesWithSystem")
             require(scales) { "type.scalesWithSystem 必须为 true：字号跟随系统缩放" }
+            val typeLatin = type.getString("latin").trim()
+            val typeCjk = type.getString("cjk").trim()
+            val typeCjkBundledAs = type.getString("cjkBundledAs").trim()
+            require(typeLatin.isNotEmpty() && typeCjk.isNotEmpty() && typeCjkBundledAs.isNotEmpty()) {
+                "type.latin / type.cjk / type.cjkBundledAs 不能为空"
+            }
             val rolesJson = type.getJSONArray("roles")
             val roles = buildList {
                 for (i in 0 until rolesJson.length()) {
@@ -82,10 +94,12 @@ data class SemanticTokens(
                     require(!item.has("line") && !item.has("lineHeight")) { "文字角色不能写死行高" }
                     val size = item.getInt("referenceSizeSp")
                     require(size > 0) { "referenceSizeSp 必须为正" }
+                    val weight = item.getString("weight")
+                    require(weight == "bold" || weight == "regular") { "文字字重只能是 bold 或 regular" }
                     add(
                         TypeRole(
                             id = item.getString("id"),
-                            weight = item.getString("weight"),
+                            weight = weight,
                             referenceSizeSp = size,
                             androidStyle = item.getString("android"),
                             appleStyle = item.getString("apple"),
@@ -103,6 +117,11 @@ data class SemanticTokens(
             val emphasizedMs = motion.getInt("emphasizedMs")
             require(shortMs in 1..standardMs && standardMs <= emphasizedMs) { "动效时长必须递增" }
             val material = root.getJSONObject("material")
+            fun materialText(key: String): String {
+                val value = material.getString(key).trim()
+                require(value.isNotEmpty()) { "material.$key 不能为空" }
+                return value
+            }
 
             return SemanticTokens(
                 name = root.getString("name"),
@@ -119,9 +138,15 @@ data class SemanticTokens(
                 motionStandardMs = standardMs,
                 motionEmphasizedMs = emphasizedMs,
                 motionReduced = motion.getString("reduced"),
-                materialPersistent = material.getString("persistent"),
-                materialTransient = material.getString("transient"),
-                materialFallback = material.getString("fallback"),
+                materialPersistent = materialText("persistent"),
+                materialTransient = materialText("transient"),
+                materialFallback = materialText("fallback"),
+                materialLightGlass = materialText("lightGlass"),
+                materialSolidBar = materialText("solidBar"),
+                materialScrollTitle = materialText("scrollTitle"),
+                typeLatin = typeLatin,
+                typeCjk = typeCjk,
+                typeCjkBundledAs = typeCjkBundledAs,
             )
         }
 

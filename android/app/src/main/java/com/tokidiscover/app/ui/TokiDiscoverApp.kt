@@ -85,6 +85,7 @@ import com.tokidiscover.app.ui.components.OverlayTitle
 import com.tokidiscover.app.ui.theme.ThemeMode
 import com.tokidiscover.app.ui.theme.TokiDiscoverTheme
 import com.tokidiscover.app.ui.theme.colorFromHex
+import com.tokidiscover.app.ui.theme.solidChrome
 import com.tokidiscover.app.ui.theme.tokiChrome
 import com.tokiui.semantic.SemanticTokens
 import dev.chrisbanes.haze.hazeSource
@@ -298,7 +299,14 @@ private fun DiscoverShell(
                     }
                 }
                 if (!showingPage) {
-                    OverlayTitle(title, overlapped, { topBarHeight = it }, Modifier.align(Alignment.TopCenter))
+                    OverlayTitle(
+                        title = title,
+                        overlapped = overlapped,
+                        backdropBlur = backdropBlur,
+                        hazeState = hazeState,
+                        onHeight = { topBarHeight = it },
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
                 }
                 Column(
                     Modifier
@@ -365,7 +373,7 @@ private fun DiscoverShell(
                         )
                     }
                     if (!wide) {
-                        DiscoverNavBar(navEntries, dest, ::select, glass)
+                        DiscoverNavBar(navEntries, dest, ::select, glass, solidStroke = solidChrome(backdropBlur))
                     }
                 }
                 SnackbarHost(

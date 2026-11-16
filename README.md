@@ -2,7 +2,7 @@
 
 Toki 系列的轻量三端浏览器：地址栏、多标签（含无痕）、书签/历史/下载、搜索引擎、页内查找与翻译、设置和检查更新。
 
-Android **0.1.1** 起界面遵循 [TokiUI](https://github.com/ichiyotsu/TokiUI)（Material 3 Expressive）。语义 token 和官方解析器的快照在 `android/tokiui/`，刷新方式见该目录的 `SYNC.md`。iOS 与 Windows 仍是 **0.1.0** 的原有界面，这次没有改。
+Android **0.1.1** 起界面遵循 [TokiUI](https://github.com/ichiyotsu/TokiUI) 0.1.4（Material 3 Expressive，拉丁文 Inter，汉字思源黑体）。语义 token 和官方解析器的快照在 `android/tokiui/`（标签 `v0.1.4`），刷新方式见该目录的 `SYNC.md`。iOS 与 Windows 仍是 **0.1.0** 的原有界面，这次没有改。
 
 - Android：0.1.1，minSdk 36（Android 16），Kotlin + Jetpack Compose，系统 WebView，包名 `com.tokidiscover.app`
 - iOS：0.1.0，SwiftUI + WKWebView

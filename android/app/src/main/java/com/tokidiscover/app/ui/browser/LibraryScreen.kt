@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tokidiscover.app.ui.BrowserViewModel
+import com.tokidiscover.app.ui.components.LongPressLabel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -75,8 +76,10 @@ fun LibraryScreen(
                                 headlineContent = { Text(bookmark.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 supportingContent = { Text("${bookmark.folder} · ${bookmark.url}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 trailingContent = {
-                                    IconButton(onClick = { vm.removeBookmark(bookmark.id) }) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "删除书签")
+                                    LongPressLabel("删除书签") {
+                                        IconButton(onClick = { vm.removeBookmark(bookmark.id) }) {
+                                            Icon(Icons.Filled.Delete, contentDescription = "删除书签")
+                                        }
                                     }
                                 },
                                 modifier = Modifier.clickable { onOpenUrl(bookmark.url) },
