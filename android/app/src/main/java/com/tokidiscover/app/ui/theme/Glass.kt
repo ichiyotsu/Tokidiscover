@@ -1,25 +1,128 @@
 package com.tokidiscover.app.ui.theme
-import androidx.compose.foundation.isSystemInDarkTheme
+
+import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeFeatureFlags
 import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazePerformanceMode
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
-/** Copied from Tokinote Glass.kt: single-layer glass recipe. */
-fun Modifier.tokiGlass(hazeState: HazeState, blurRadius: Dp, tints: List<Color>, fallback: Color, noise: Float = 0.02f): Modifier = hazeBlur(
-    input = HazeInput.Sources(hazeState),
-    style = HazeBlurStyle { blurRadius(blurRadius); noiseFactor(noise)
-        colorEffects(tints.map { HazeColorEffect.tint(it) }); fallbackColorEffect(HazeColorEffect.tint(fallback)) },
-)
-/** Floating capsule glass: 30dp blur, black 3%/16% + white 10%/8%, fallback black 30%/55%, NO solid layer. Used by FloatingNavBar + FloatingOmnibox. */
-@Composable fun Modifier.tokiNavGlass(hazeState: HazeState): Modifier {
-    val dark = isSystemInDarkTheme()
-    val black = if (dark) 0.16f else 0.03f; val white = if (dark) 0.08f else 0.10f
-    return tokiGlass(hazeState, 30.dp, listOf(Color.Black.copy(alpha = black), Color.White.copy(alpha = white)),
-        fallback = Color.Black.copy(alpha = if (dark) 0.55f else 0.30f))
+
+/**
+ * Window sampling for floating capsules and scroll chips.
+ *
+ * [androidx.compose.ui.draw.blur] and [HazeInput.Content] only blur the control's
+ * own pixels, so they are not used. [HazeInput.Backdrop] samples pixels already
+ * drawn in this window and falls back to the `hazeSource` content root.
+ */
+@OptIn(ExperimentalHazeApi::class)
+object TokiBlurCapability {
+    fun install() {
+        HazeFeatureFlags.isPlatformBackdropEnabled = true
+    }
+
+    val canSampleInWindow: Boolean
+        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+}
+
+object TokiGlassParams {
+    val blurRadius: Dp = 24.dp
+    const val noise: Float = 0.02f
+
+    /** Light: 16% warm veil, then 46% white. Dark: 20% white, no black veil. */
+    fun tints(dark: Boolean): List<HazeColorEffect> = if (dark) {
+        listOf(HazeColorEffect.tint(Color.White.copy(alpha = 0.20f)))
+    } else {
+        listOf(
+            HazeColorEffect.tint(Color(0xFF2A2622).copy(alpha = 0.16f)),
+            HazeColorEffect.tint(Color.White.copy(alpha = 0.46f)),
+        )
+    }
+
+    fun fallback(dark: Boolean): Color = Color.Black.copy(alpha = if (dark) 0.45f else 0.30f)
+}
+
+/** Solid bar and scroll-chip stroke. Glass surfaces do not use this stroke. */
+object TokiChromeStroke {
+    val width: Dp = 3.dp
+    val barGap: Dp = 6.dp
+}
+
+@OptIn(ExperimentalHazeApi::class)
+private fun tokiBlurStyle(dark: Boolean): HazeBlurStyle = HazeBlurStyle {
+    blurEnabled(true)
+    blurRadius(TokiGlassParams.blurRadius)
+    noiseFactor(TokiGlassParams.noise)
+    backgroundColor(Color.Transparent)
+    colorEffects(TokiGlassParams.tints(dark))
+    fallbackColorEffect(HazeColorEffect.tint(TokiGlassParams.fallback(dark)))
+}
+
+@OptIn(ExperimentalHazeApi::class)
+@Composable
+fun Modifier.tokiGlass(state: HazeState): Modifier {
+    val dark = LocalDarkTheme.current
+    return hazeBlur(
+        input = HazeInput.Backdrop(state),
+        style = tokiBlurStyle(dark),
+        performanceMode = HazePerformanceMode.Quality,
+    )
+}
+
+/** Glass inside a capsule when blur is on and the device can sample; otherwise an opaque surface. */
+@Composable
+fun tokiChrome(state: HazeState, backdropBlur: Boolean): Modifier {
+    return if (backdropBlur && TokiBlurCapability.canSampleInWindow) {
+        Modifier.tokiGlass(state)
+    } else {
+        Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
+    }
+}
+
+fun solidChrome(backdropBlur: Boolean): Boolean =
+    !(backdropBlur && TokiBlurCapability.canSampleInWindow)
+
+/**
+ * Scroll chip behind a large title or back button.
+ * Frosted chips are only the shared blur layer. Solid chips are surfaceContainer plus the 3dp primary stroke.
+ */
+@Composable
+fun TokiScrollChipBackdrop(
+    shape: Shape,
+    cover: Float,
+    backdropBlur: Boolean,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    applyBlur: Boolean = false,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val frosted = backdropBlur && TokiBlurCapability.canSampleInWindow
+    val canBlur = applyBlur && hazeState != null && cover > 0.01f && frosted
+    Box(
+        modifier
+            .clip(shape)
+            .then(if (canBlur) Modifier.tokiGlass(hazeState) else Modifier)
+            .then(
+                if (!frosted && cover > 0f) {
+                    Modifier
+                        .background(scheme.surfaceContainer.copy(alpha = cover))
+                        .border(TokiChromeStroke.width, scheme.primary.copy(alpha = cover), shape)
+                } else {
+                    Modifier
+                },
+            ),
+    )
 }

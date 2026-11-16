@@ -1,11 +1,12 @@
 # TokiDiscover
 
-Toki 系列的轻量三端浏览器：底部悬浮胶囊地址栏、多标签（含无痕）、书签/历史/下载书库，
-设计规范与 Tokinote / tokimusic 完全一致（Matcha 配色、TokiShapes、悬浮毛玻璃胶囊）。
+Toki 系列的轻量三端浏览器：地址栏、多标签（含无痕）、书签/历史/下载、搜索引擎、页内查找与翻译、设置和检查更新。
 
-- 版本：**0.1.0**
-- 平台与引擎：Android（Kotlin + Jetpack Compose，系统 WebView，包名 `com.tokidiscover.app`）/
-  iOS（SwiftUI，WKWebView）/ Windows（原生 WinUI 3，WebView2）
+Android **0.1.1** 起界面遵循 [TokiUI](https://github.com/ichiyotsu/TokiUI) 0.1.4（Material 3 Expressive，拉丁文 Inter，汉字思源黑体）。语义 token 和官方解析器的快照在 `android/tokiui/`（标签 `v0.1.4`），刷新方式见该目录的 `SYNC.md`。iOS 与 Windows 仍是 **0.1.0** 的原有界面，这次没有改。
+
+- Android：0.1.1，minSdk 36（Android 16），Kotlin + Jetpack Compose，系统 WebView，包名 `com.tokidiscover.app`
+- iOS：0.1.0，SwiftUI + WKWebView
+- Windows：0.1.0，WinUI 3 + WebView2
 - 默认搜索引擎：Bing（设置里可换 Google / DuckDuckGo / 百度 / 自定义模板）
 
 ## 功能清单
@@ -32,8 +33,7 @@ docs/      DESIGN.md 设计令牌 / ARCHITECTURE.md 引擎与限制
 
 ## 构建说明
 
-- Android：Android Studio 打开 `android/` 或 `./gradlew :app:assembleDebug`（需 JDK 17 + Android SDK）。
-  本仓库在 Linux VM 上**未编译** Android（当时无 JDK/Android SDK），以 CI 为准。
+- Android：Android Studio 打开 `android/` 或 `./gradlew :app:testDebugUnitTest :app:assembleDebug`（JDK 17，compileSdk 37，minSdk 36）。
 - iOS：Xcode 打开 `ios/TokiDiscover.xcodeproj`；纯逻辑包可 `cd ios/TokiDiscoverCore && swift test`（需 Swift 工具链）。
   Linux 无 Xcode/Swift，**未编译** iOS 本体与 Core 包；pbxproj 为手写最小壳，需 Xcode 打开验证。
 - Windows：Visual Studio 打开 `windows/TokiDiscover.sln` 构建 WinUI 本体（需 Windows）。
