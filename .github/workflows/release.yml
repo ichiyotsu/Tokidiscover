@@ -61,11 +61,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
-        run: bash ./gradlew assembleRelease --no-daemon --stacktrace -x lintVitalAnalyzeRelease -x lintVitalRelease
+        run: bash ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace -x lintVitalAnalyzeRelease -x lintVitalRelease
 
       - name: Name release artifacts
         run: |
           mkdir -p ../dist
+          cp app/build/outputs/bundle/release/app-release.aab "../dist/TokiDiscover-${VERSION_NAME}.aab"
           cp app/build/outputs/apk/release/app-release.apk "../dist/TokiDiscover-${VERSION_NAME}.apk"
 
       - uses: actions/upload-artifact@v4
@@ -192,6 +193,7 @@ jobs:
           make_latest: ${{ env.IS_PRERELEASE == 'false' }}
           fail_on_unmatched_files: true
           files: |
+            - dist/TokiDiscover-${{ env.VERSION_NAME }}.aab
             dist/TokiDiscover-${{ env.VERSION_NAME }}.apk
             dist/TokiDiscover-Windows-${{ env.VERSION_NAME }}-win-x64.zip
             dist/TokiDiscover-ios-${{ env.VERSION_NAME }}.ipa
