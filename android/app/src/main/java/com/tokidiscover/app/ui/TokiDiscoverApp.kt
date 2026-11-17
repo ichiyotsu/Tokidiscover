@@ -3,10 +3,18 @@ package com.tokidiscover.app.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.webkit.WebChromeClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
@@ -34,6 +41,7 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -75,11 +83,12 @@ import com.tokidiscover.app.data.PageActions
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.ui.browser.HomeScreen
 import com.tokidiscover.app.ui.browser.LibraryScreen
+import com.tokidiscover.app.ui.browser.SettingsPage
 import com.tokidiscover.app.ui.browser.SettingsScreen
 import com.tokidiscover.app.ui.browser.TabWebHost
 import com.tokidiscover.app.ui.browser.TabsScreen
-import com.tokidiscover.app.ui.components.DiscoverNavBar
 import com.tokidiscover.app.ui.components.DiscoverOmnibox
+import com.tokidiscover.app.ui.components.MoreMenuPanel
 import com.tokidiscover.app.ui.components.NavEntry
 import com.tokidiscover.app.ui.components.OverlayTitle
 import com.tokidiscover.app.ui.theme.ThemeMode
@@ -100,6 +109,16 @@ private val navEntries = listOf(
 )
 
 private val ExpandedWindow = 840.dp
+
+private fun settingsPageTitle(page: SettingsPage): String = when (page) {
+    SettingsPage.Main -> "设置"
+    SettingsPage.Appearance -> "外观"
+    SettingsPage.SearchEngine -> "搜索引擎"
+    SettingsPage.Browsing -> "浏览"
+    SettingsPage.ClearData -> "清除浏览数据"
+    SettingsPage.Update -> "更新"
+    SettingsPage.About -> "关于"
+}
 
 @Composable
 fun TokiDiscoverApp() {
@@ -135,6 +154,7 @@ fun TokiDiscoverApp() {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DiscoverShell(
     vm: BrowserViewModel,
@@ -159,8 +179,12 @@ private fun DiscoverShell(
     var destName by rememberSaveable { mutableStateOf(Dest.Browser.name) }
     val dest = runCatching { Dest.valueOf(destName) }.getOrDefault(Dest.Browser)
     fun select(next: Dest) { destName = next.name }
+    var settingsPageName by rememberSaveable { mutableStateOf(SettingsPage.Main.name) }
+    val settingsPage = runCatching { SettingsPage.valueOf(settingsPageName) }.getOrDefault(SettingsPage.Main)
     var collapsed by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var editNonce by remember { mutableIntStateOf(0) }
     var findVisible by rememberSaveable { mutableStateOf(false) }
     var findQuery by rememberSaveable { mutableStateOf("") }
     var rendererEpoch by remember { mutableIntStateOf(0) }
@@ -181,11 +205,15 @@ private fun DiscoverShell(
     }
     val overlapped = headerOverlapsContent(headerOffset.floatValue, with(density) { 8.dp.toPx() })
     val showingPage = dest == Dest.Browser && vm.activeTab.url != UrlNormalizer.NEW_TAB_URL
-    val title = when (dest) {
-        Dest.Browser -> if (vm.activeTab.isPrivate) "无痕浏览" else "TokiDiscover"
-        Dest.Tabs -> "标签页"
-        Dest.Library -> "书库"
-        Dest.Settings -> "设置"
+    val title = if (dest == Dest.Settings && settingsPage != SettingsPage.Main) {
+        settingsPageTitle(settingsPage)
+    } else {
+        when (dest) {
+            Dest.Browser -> if (vm.activeTab.isPrivate) "无痕浏览" else "TokiDiscover"
+            Dest.Tabs -> "标签页"
+            Dest.Library -> "书库"
+            Dest.Settings -> "设置"
+        }
     }
     var topBarHeight by remember { mutableStateOf(96.dp) }
     var barHeight by remember { mutableStateOf(0.dp) }
@@ -195,6 +223,12 @@ private fun DiscoverShell(
     val bottomPadding = barHeight + 16.dp
     val surface = MaterialTheme.colorScheme.surface.toArgb()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val singlePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        hostRef.value?.controller?.deliverFileChooserResult(uri?.let { arrayOf(it) })
+    }
+    val multiPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        hostRef.value?.controller?.deliverFileChooserResult(uris.takeIf { it.isNotEmpty() }?.toTypedArray())
+    }
     fun toast(message: String) { scope.launch { snackbar.showSnackbar(message) } }
 
     LaunchedEffect(dest, vm.activeTabId) {
@@ -202,11 +236,17 @@ private fun DiscoverShell(
         collapsed = false
         editing = false
         findVisible = false
+        menuExpanded = false
+        settingsPageName = SettingsPage.Main.name
     }
 
     val webBack = showingPage && vm.activeTab.canGoBack
     BackHandler(enabled = webBack) { hostRef.value?.controller?.back() }
     BackHandler(enabled = !webBack && dest != Dest.Browser) { select(Dest.Browser) }
+    BackHandler(enabled = dest == Dest.Settings && settingsPage != SettingsPage.Main) {
+        settingsPageName = SettingsPage.Main.name
+    }
+    BackHandler(enabled = menuExpanded) { menuExpanded = false }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         val wide = maxWidth >= ExpandedWindow
@@ -255,11 +295,20 @@ private fun DiscoverShell(
                             }
                             controller.onScroll = { dy -> collapsed = nextOmniboxCollapsed(collapsed, dy, editing) }
                             controller.onRendererGone = { rendererEpoch++ }
+                            controller.onOpenInNewTab = { url, isPrivate -> vm.newTab(isPrivate = isPrivate, url = url) }
+                            controller.onFileChooserRequested = { mode, accept ->
+                                val mime = accept.firstOrNull { it.isNotBlank() } ?: "*/*"
+                                if (mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                                    multiPicker.launch(mime)
+                                } else {
+                                    singlePicker.launch(mime)
+                                }
+                            }
                             host.sync(vm, showingPage, surface)
                         },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(if (showingPage) Modifier.statusBarsPadding() else Modifier),
+                        // The WebView never resizes: no conditional status bar padding.
+                        // Resizing on every navigation was repainting the page (flicker).
+                        modifier = Modifier.fillMaxSize(),
                     )
                     SideEffect {
                         val pending = vm.pendingNavigation ?: return@SideEffect
@@ -279,6 +328,8 @@ private fun DiscoverShell(
                             Dest.Settings -> SettingsScreen(
                                 vm = vm,
                                 tokens = tokens,
+                                page = settingsPage,
+                                onPage = { settingsPageName = it.name },
                                 topPadding = top,
                                 bottomPadding = bottomPadding,
                                 nestedScroll = nested,
@@ -306,6 +357,22 @@ private fun DiscoverShell(
                         hazeState = hazeState,
                         onHeight = { topBarHeight = it },
                         modifier = Modifier.align(Alignment.TopCenter),
+                        onBack = if (dest == Dest.Settings && settingsPage != SettingsPage.Main) {
+                            { settingsPageName = SettingsPage.Main.name }
+                        } else {
+                            null
+                        },
+                    )
+                }
+                if (menuExpanded) {
+                    // Tapping anywhere outside the menu dismisses it.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { menuExpanded = false },
                     )
                 }
                 Column(
@@ -344,36 +411,59 @@ private fun DiscoverShell(
                             }) { Text("关闭") }
                         }
                     }
-                    if (showingPage) {
+                    if (!wide || showingPage) {
+                        val motion = MaterialTheme.motionScheme
+                        AnimatedVisibility(
+                            visible = menuExpanded,
+                            enter = expandVertically(motion.defaultSpatialSpec(), expandFrom = Alignment.Bottom) +
+                                fadeIn(motion.defaultEffectsSpec()),
+                            exit = shrinkVertically(motion.defaultSpatialSpec(), shrinkTowards = Alignment.Bottom) +
+                                fadeOut(motion.defaultEffectsSpec()),
+                        ) {
+                            MoreMenuPanel(
+                                entries = navEntries,
+                                current = dest,
+                                onSelect = { menuExpanded = false; select(it) },
+                                bookmarked = vm.isBookmarked(vm.activeTab.url),
+                                onBookmark = { menuExpanded = false; vm.toggleBookmark() },
+                                onShare = {
+                                    menuExpanded = false
+                                    val send = Intent(Intent.ACTION_SEND)
+                                        .setType("text/plain")
+                                        .putExtra(Intent.EXTRA_TEXT, vm.activeTab.url)
+                                    context.startActivity(Intent.createChooser(send, "分享当前页"))
+                                },
+                                onFind = { menuExpanded = false; findVisible = true },
+                                onTranslate = {
+                                    menuExpanded = false
+                                    if (UrlNormalizer.isSafeScheme(vm.activeTab.url)) {
+                                        vm.navigate(PageActions.translateUrl(vm.activeTab.url))
+                                    }
+                                },
+                                glass = glass,
+                                solidStroke = solidChrome(backdropBlur),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                         DiscoverOmnibox(
                             tab = vm.activeTab,
                             collapsed = collapsed,
+                            compactMode = !showingPage,
+                            editRequest = editNonce,
+                            reduceMotion = reduceMotion,
                             tabCount = vm.tabs.size,
-                            bookmarked = vm.isBookmarked(vm.activeTab.url),
                             glass = glass,
                             onSubmit = { vm.submitOmnibox(it) },
                             onBack = { hostRef.value?.controller?.back() },
                             onForward = { hostRef.value?.controller?.forward() },
                             onReloadOrStop = { hostRef.value?.controller?.reloadOrStop(vm.activeTab.progress in 1..99) },
                             onTabs = { select(Dest.Tabs) },
-                            onBookmark = { vm.toggleBookmark() },
-                            onShare = {
-                                val send = Intent(Intent.ACTION_SEND)
-                                    .setType("text/plain")
-                                    .putExtra(Intent.EXTRA_TEXT, vm.activeTab.url)
-                                context.startActivity(Intent.createChooser(send, "分享当前页"))
-                            },
-                            onFind = { findVisible = true },
-                            onTranslate = {
-                                if (UrlNormalizer.isSafeScheme(vm.activeTab.url)) vm.navigate(PageActions.translateUrl(vm.activeTab.url))
-                            },
+                            onMenuClick = { menuExpanded = !menuExpanded },
+                            onAddressTap = { select(Dest.Browser); editNonce++ },
                             onEditing = { editing = it },
                             onExpand = { collapsed = false },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    }
-                    if (!wide) {
-                        DiscoverNavBar(navEntries, dest, ::select, glass, solidStroke = solidChrome(backdropBlur))
                     }
                 }
                 SnackbarHost(
