@@ -3,6 +3,8 @@ package com.tokidiscover.app.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -81,6 +83,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tokidiscover.app.TokiDiscoverApplication
 import com.tokidiscover.app.data.PageActions
 import com.tokidiscover.app.data.UrlNormalizer
+import com.tokidiscover.app.data.WebPermissionPolicy
 import com.tokidiscover.app.ui.browser.HomeScreen
 import com.tokidiscover.app.ui.browser.LibraryScreen
 import com.tokidiscover.app.ui.browser.SettingsPage
@@ -118,6 +121,37 @@ private fun settingsPageTitle(page: SettingsPage): String = when (page) {
     SettingsPage.ClearData -> "清除浏览数据"
     SettingsPage.Update -> "更新"
     SettingsPage.About -> "关于"
+}
+
+/** A page's permission request waiting on the user, then on the system prompt. */
+private sealed interface PendingWebPermission {
+    val origin: String
+    val systemPermissions: Array<String>
+    fun deny()
+
+    data class Media(val request: PermissionRequest) : PendingWebPermission {
+        override val origin: String get() = request.origin.toString()
+        override val systemPermissions: Array<String>
+            get() = WebPermissionPolicy.systemPermissionsFor(request.resources).toTypedArray()
+        override fun deny() {
+            runCatching { request.deny() }
+        }
+    }
+
+    data class Location(
+        val site: String,
+        val callback: GeolocationPermissions.Callback,
+    ) : PendingWebPermission {
+        override val origin: String get() = site
+        override val systemPermissions: Array<String>
+            get() = arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+        override fun deny() {
+            runCatching { callback.invoke(site, false, false) }
+        }
+    }
 }
 
 @Composable
@@ -187,6 +221,8 @@ private fun DiscoverShell(
     var editNonce by remember { mutableIntStateOf(0) }
     var findVisible by rememberSaveable { mutableStateOf(false) }
     var findQuery by rememberSaveable { mutableStateOf("") }
+    var pendingWebPermission by remember { mutableStateOf<PendingWebPermission?>(null) }
+    var resolvingWebPermission by remember { mutableStateOf<PendingWebPermission?>(null) }
     var rendererEpoch by remember { mutableIntStateOf(0) }
     val hostRef = remember { mutableStateOf<TabWebHost?>(null) }
     val headerOffset = remember { mutableFloatStateOf(0f) }
@@ -223,6 +259,32 @@ private fun DiscoverShell(
     val bottomPadding = barHeight + 16.dp
     val surface = MaterialTheme.colorScheme.surface.toArgb()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val webPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val pending = resolvingWebPermission ?: return@rememberLauncherForActivityResult
+        resolvingWebPermission = null
+        val granted = result.filterValues { it }.keys
+        when (pending) {
+            is PendingWebPermission.Media -> {
+                val grantable = WebPermissionPolicy.grantableResources(pending.request.resources, granted)
+                runCatching {
+                    if (grantable.isNotEmpty()) pending.request.grant(grantable) else pending.request.deny()
+                }
+                if (grantable.isEmpty()) {
+                    scope.launch { snackbar.showSnackbar("权限被拒绝，可在系统设置中开启") }
+                }
+            }
+            is PendingWebPermission.Location -> {
+                val allowed = Manifest.permission.ACCESS_FINE_LOCATION in granted ||
+                    Manifest.permission.ACCESS_COARSE_LOCATION in granted
+                runCatching { pending.callback.invoke(pending.site, allowed, false) }
+                if (!allowed) {
+                    scope.launch { snackbar.showSnackbar("权限被拒绝，可在系统设置中开启") }
+                }
+            }
+        }
+    }
     val singlePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         hostRef.value?.controller?.deliverFileChooserResult(uri?.let { arrayOf(it) })
     }
@@ -237,6 +299,8 @@ private fun DiscoverShell(
         editing = false
         findVisible = false
         menuExpanded = false
+        pendingWebPermission?.deny()
+        pendingWebPermission = null
         settingsPageName = SettingsPage.Main.name
     }
 
@@ -302,6 +366,20 @@ private fun DiscoverShell(
                                     multiPicker.launch(mime)
                                 } else {
                                     singlePicker.launch(mime)
+                                }
+                            }
+                            controller.onWebPermissionRequest = { request ->
+                                if (pendingWebPermission == null && resolvingWebPermission == null) {
+                                    pendingWebPermission = PendingWebPermission.Media(request)
+                                } else {
+                                    runCatching { request.deny() }
+                                }
+                            }
+                            controller.onGeolocationRequest = { site, callback ->
+                                if (pendingWebPermission == null && resolvingWebPermission == null) {
+                                    pendingWebPermission = PendingWebPermission.Location(site, callback)
+                                } else {
+                                    runCatching { callback.invoke(site, false, false) }
                                 }
                             }
                             host.sync(vm, showingPage, surface)
@@ -479,6 +557,34 @@ private fun DiscoverShell(
             confirmButton = { TextButton(onClick = { vm.blockedMessage = null }) { Text("知道了") } },
             title = { Text("已拦截") },
             text = { Text(message) },
+        )
+    }
+    pendingWebPermission?.let { pending ->
+        val host = WebPermissionPolicy.originHost(pending.origin)
+        val labels = when (pending) {
+            is PendingWebPermission.Media -> WebPermissionPolicy.resourceLabels(pending.request.resources)
+            is PendingWebPermission.Location -> listOf("位置信息")
+        }
+        AlertDialog(
+            onDismissRequest = {
+                pendingWebPermission = null
+                pending.deny()
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingWebPermission = null
+                    resolvingWebPermission = pending
+                    webPermissionLauncher.launch(pending.systemPermissions)
+                }) { Text("允许") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingWebPermission = null
+                    pending.deny()
+                }) { Text("不允许") }
+            },
+            title = { Text("网站权限请求") },
+            text = { Text("「$host」想要使用${labels.joinToString("、")}。允许后，系统会弹出权限请求。") },
         )
     }
 }

@@ -31,6 +31,7 @@ import com.tokidiscover.app.data.BrowserTab
 import com.tokidiscover.app.data.SchemeAction
 import com.tokidiscover.app.data.SchemePolicy
 import com.tokidiscover.app.data.UrlNormalizer
+import com.tokidiscover.app.data.WebPermissionPolicy
 import com.tokidiscover.app.ui.BrowserViewModel
 
 private const val DESKTOP_UA =
@@ -323,20 +324,26 @@ class TabWebHost(context: Context) : FrameLayout(context) {
                 ) {
                     val allowed = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ||
                         hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    callback.invoke(origin, allowed, false)
+                    if (allowed) {
+                        callback.invoke(origin, true, false)
+                    } else {
+                        controller.onGeolocationRequest(origin, callback)
+                    }
                 }
 
                 override fun onPermissionRequest(request: PermissionRequest) {
-                    val granted = request.resources.filter { resource ->
-                        when (resource) {
-                            PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
-                                hasPermission(Manifest.permission.CAMERA)
-                            PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                                hasPermission(Manifest.permission.RECORD_AUDIO)
-                            else -> false
-                        }
+                    val needed = WebPermissionPolicy.systemPermissionsFor(request.resources)
+                    if (needed.isEmpty()) {
+                        // Nothing grantable (e.g. protected media only): deny as before.
+                        request.deny()
+                        return
                     }
-                    if (granted.isNotEmpty()) request.grant(granted.toTypedArray()) else request.deny()
+                    val granted = needed.filter { hasPermission(it) }.toSet()
+                    if (granted.containsAll(needed)) {
+                        request.grant(WebPermissionPolicy.grantableResources(request.resources, granted))
+                    } else {
+                        controller.onWebPermissionRequest(request)
+                    }
                 }
             }
             setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
@@ -369,6 +376,11 @@ class WebController {
     var onRendererGone: () -> Unit = {}
     var onOpenInNewTab: (String, Boolean) -> Unit = { _, _ -> }
     var onFileChooserRequested: (Int, Array<String>) -> Unit = { _, _ -> }
+    /** A page wants camera/microphone and the app lacks the system permission: the shell prompts. */
+    var onWebPermissionRequest: (PermissionRequest) -> Unit = { it.deny() }
+    /** A page wants the location and the app lacks the system permission: the shell prompts. */
+    var onGeolocationRequest: (String, GeolocationPermissions.Callback) -> Unit =
+        { origin, callback -> callback.invoke(origin, false, false) }
     var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     /** URL whose friendly error page is currently shown, so refresh reloads the real page. */
