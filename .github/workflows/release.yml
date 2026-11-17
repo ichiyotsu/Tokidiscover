@@ -66,8 +66,8 @@ jobs:
       - name: Name release artifacts
         run: |
           mkdir -p ../dist
-          cp app/build/outputs/bundle/release/app-release.aab "../dist/TokiDiscover-${VERSION_NAME}.aab"
           cp app/build/outputs/apk/release/app-release.apk "../dist/TokiDiscover-${VERSION_NAME}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "../dist/TokiDiscover-${VERSION_NAME}.aab"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -193,7 +193,7 @@ jobs:
           make_latest: ${{ env.IS_PRERELEASE == 'false' }}
           fail_on_unmatched_files: true
           files: |
-            - dist/TokiDiscover-${{ env.VERSION_NAME }}.aab
             dist/TokiDiscover-${{ env.VERSION_NAME }}.apk
+            dist/TokiDiscover-${{ env.VERSION_NAME }}.aab
             dist/TokiDiscover-Windows-${{ env.VERSION_NAME }}-win-x64.zip
             dist/TokiDiscover-ios-${{ env.VERSION_NAME }}.ipa
