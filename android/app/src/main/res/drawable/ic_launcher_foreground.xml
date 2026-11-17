@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- reicon/discover-filled (https://yesicon.app/reicon/discover-filled), path data verbatim.
+     Glyph outer diameter 42dp on the 108dp canvas: scale 2.1, centered (translate 28.8). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="@android:color/white"
-        android:pathData="M66,20a34,34 0 1,0 22,54A40,40 0 0,1 66,20z" />
+    <group
+        android:scaleX="2.1"
+        android:scaleY="2.1"
+        android:translateX="28.8"
+        android:translateY="28.8">
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:pathData="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10s10-4.49 10-10S17.51 2 12 2m-1.5 14.13c-1.45 0-2.62-1.18-2.62-2.62c0-3.1 2.52-5.62 5.62-5.62c1.45 0 2.62 1.18 2.62 2.62c0 3.09-2.52 5.62-5.62 5.62" />
+    </group>
 </vector>
