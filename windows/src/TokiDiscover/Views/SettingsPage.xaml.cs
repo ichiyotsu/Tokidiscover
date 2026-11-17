@@ -25,7 +25,7 @@ public sealed partial class SettingsPage : Page
         UpdateText.Text = "检查中…";
         try { using var http = new System.Net.Http.HttpClient(); http.DefaultRequestHeaders.UserAgent.ParseAdd("TokiDiscover");
             var json = await http.GetStringAsync(UpdateChecker.ReleasesApi); var latest = UpdateChecker.ExtractLatestVersion(json);
-            UpdateText.Text = latest == null ? "暂时无法解析版本" : UpdateChecker.IsNewer(latest, "0.1.0") ? $"发现新版本 {latest}" : "已是最新版本";
+            UpdateText.Text = latest == null ? "暂时无法解析版本" : UpdateChecker.IsNewer(latest, AppVersion.Informational) ? $"发现新版本 {latest}" : "已是最新版本";
         } catch { UpdateText.Text = "暂时无法检查（仓库未创建或无网络）"; }
     }
 }
