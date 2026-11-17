@@ -18,5 +18,5 @@
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
   <ItemGroup><ProjectReference Include="..\TokiDiscover.Core\TokiDiscover.Core.csproj" /></ItemGroup>
-  <ItemGroup><Content Include="Assets\SplashWindow.png" /></ItemGroup>
+  <ItemGroup><Content Include="Assets\SplashWindow.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
 </Project>
