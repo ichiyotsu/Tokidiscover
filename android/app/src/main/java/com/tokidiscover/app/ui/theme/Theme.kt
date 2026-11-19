@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
@@ -20,7 +21,8 @@ enum class ThemeMode { System, Light, Dark }
 
 val LocalDarkTheme = staticCompositionLocalOf { false }
 
-private fun Typography.withTokiType(family: androidx.compose.ui.text.font.FontFamily): Typography {
+/** Bold-only for display/headline/title/label (incl. all 15 emphasized styles), Normal for body. */
+internal fun Typography.withTokiType(family: androidx.compose.ui.text.font.FontFamily): Typography {
     fun TextStyle.bold() = copy(fontFamily = family, fontWeight = FontWeight.Bold)
     fun TextStyle.regular() = copy(fontFamily = family, fontWeight = FontWeight.Normal)
     return Typography(
@@ -29,6 +31,11 @@ private fun Typography.withTokiType(family: androidx.compose.ui.text.font.FontFa
         titleLarge = titleLarge.bold(), titleMedium = titleMedium.bold(), titleSmall = titleSmall.bold(),
         bodyLarge = bodyLarge.regular(), bodyMedium = bodyMedium.regular(), bodySmall = bodySmall.regular(),
         labelLarge = labelLarge.bold(), labelMedium = labelMedium.bold(), labelSmall = labelSmall.bold(),
+        displayLargeEmphasized = displayLargeEmphasized.bold(), displayMediumEmphasized = displayMediumEmphasized.bold(), displaySmallEmphasized = displaySmallEmphasized.bold(),
+        headlineLargeEmphasized = headlineLargeEmphasized.bold(), headlineMediumEmphasized = headlineMediumEmphasized.bold(), headlineSmallEmphasized = headlineSmallEmphasized.bold(),
+        titleLargeEmphasized = titleLargeEmphasized.bold(), titleMediumEmphasized = titleMediumEmphasized.bold(), titleSmallEmphasized = titleSmallEmphasized.bold(),
+        bodyLargeEmphasized = bodyLargeEmphasized.bold(), bodyMediumEmphasized = bodyMediumEmphasized.bold(), bodySmallEmphasized = bodySmallEmphasized.bold(),
+        labelLargeEmphasized = labelLargeEmphasized.bold(), labelMediumEmphasized = labelMediumEmphasized.bold(), labelSmallEmphasized = labelSmallEmphasized.bold(),
     )
 }
 
@@ -56,12 +63,18 @@ fun TokiDiscoverTheme(
             }
         }
     }
+    val colorScheme = resolveColorScheme(dark, useDynamicColor, seed)
     CompositionLocalProvider(LocalDarkTheme provides dark) {
         MaterialExpressiveTheme(
-            colorScheme = resolveColorScheme(dark, useDynamicColor, seed),
+            colorScheme = colorScheme,
             motionScheme = if (reduceMotion) MotionScheme.standard() else MotionScheme.expressive(),
             typography = Typography().withTokiType(InterFamily),
-            content = content,
-        )
+        ) {
+            // MaterialExpressiveTheme does not provide LocalContentColor: bare
+            // Text/Icon would default to black and vanish on dark backgrounds.
+            CompositionLocalProvider(LocalContentColor provides colorScheme.onBackground) {
+                content()
+            }
+        }
     }
 }

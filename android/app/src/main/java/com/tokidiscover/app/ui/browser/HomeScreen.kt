@@ -27,9 +27,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.tokidiscover.app.data.DefaultSpeedDial
 import com.tokidiscover.app.ui.BrowserViewModel
+import com.tokidiscover.app.ui.theme.TokiSpacing
 
 @Composable
 fun HomeScreen(
@@ -44,8 +44,8 @@ fun HomeScreen(
             .fillMaxSize()
             .nestedScroll(nestedScroll)
             .padding(top = topPadding, bottom = bottomPadding)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = TokiSpacing.pageMargin),
+        verticalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing),
     ) {
         item {
             Text(
@@ -67,9 +67,9 @@ fun HomeScreen(
         }
         item { Text("常用站点", style = MaterialTheme.typography.titleMedium) }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing)) {
                 DefaultSpeedDial.chunked(3).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing), modifier = Modifier.fillMaxWidth()) {
                         row.forEach { site ->
                             Surface(
                                 shape = MaterialTheme.shapes.extraLarge,
@@ -78,7 +78,7 @@ fun HomeScreen(
                                     .weight(1f)
                                     .clickable { vm.navigate(site.url) },
                             ) {
-                                Column(Modifier.padding(16.dp)) {
+                                Column(Modifier.padding(TokiSpacing.cardPadding)) {
                                     Text(site.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                                     Text(
                                         site.url.removePrefix("https://"),

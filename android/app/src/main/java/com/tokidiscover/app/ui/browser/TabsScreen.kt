@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,6 +27,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tokidiscover.app.ui.theme.TokiSpacing
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.ui.BrowserViewModel
 import com.tokidiscover.app.ui.components.LongPressLabel
@@ -42,7 +44,7 @@ fun TabsScreen(
         Modifier
             .fillMaxSize()
             .padding(top = topPadding, bottom = bottomPadding)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = TokiSpacing.pageMargin),
     ) {
         Text(
             "共 ${vm.tabs.size} 个标签，当前是「${vm.activeTab.title}」",
@@ -51,9 +53,9 @@ fun TabsScreen(
         )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(160.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.weight(1f).nestedScroll(nestedScroll).padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing),
+            verticalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing),
+            modifier = Modifier.weight(1f).nestedScroll(nestedScroll).padding(vertical = TokiSpacing.cardSpacing),
         ) {
             items(vm.tabs, key = { it.id }) { tab ->
                 val active = tab.id == vm.activeTabId
@@ -61,7 +63,7 @@ fun TabsScreen(
                     shape = MaterialTheme.shapes.extraLarge,
                     color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
                 ) {
-                    Column(Modifier.padding(12.dp)) {
+                    Column(Modifier.padding(TokiSpacing.cardPadding)) {
                         Row {
                             Text(
                                 tab.title.ifBlank { "新标签页" },
@@ -95,12 +97,12 @@ fun TabsScreen(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { vm.newTab(); onPick() }) {
+        Row(horizontalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing)) {
+            Button(onClick = { vm.newTab(); onPick() }, modifier = Modifier.height(56.dp)) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Text("新建标签", modifier = Modifier.padding(start = 6.dp))
             }
-            OutlinedButton(onClick = { vm.newTab(isPrivate = true); onPick() }) { Text("新建无痕标签") }
+            OutlinedButton(onClick = { vm.newTab(isPrivate = true); onPick() }, modifier = Modifier.height(56.dp)) { Text("新建无痕标签") }
         }
     }
 }

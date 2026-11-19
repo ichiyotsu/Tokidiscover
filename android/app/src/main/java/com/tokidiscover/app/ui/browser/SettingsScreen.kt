@@ -73,6 +73,7 @@ import com.tokidiscover.app.data.SearchEngine
 import com.tokidiscover.app.data.UpdateChecker
 import com.tokidiscover.app.ui.BrowserViewModel
 import com.tokidiscover.app.ui.theme.ThemeMode
+import com.tokidiscover.app.ui.theme.TokiSpacing
 import com.tokidiscover.app.ui.theme.colorFromHex
 import com.tokiui.semantic.SemanticTokens
 import kotlinx.coroutines.launch
@@ -105,9 +106,9 @@ fun SettingsScreen(
     onClearCache: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    val margin = tokens.spaceDp("lg", 16)
+    val margin = TokiSpacing.pageMargin
     val cardShape = RoundedCornerShape(tokens.shapeDp("large", 28))
-    val gap = tokens.spaceDp("md", 12)
+    val gap = TokiSpacing.cardSpacing
     when (page) {
         SettingsPage.Main -> SettingsMainPage(
             vm = vm,
@@ -206,14 +207,14 @@ private fun SettingsGroup(cardShape: Shape, content: @Composable () -> Unit) {
 private fun GroupHeader(tokens: SemanticTokens, icon: ImageVector, title: String) {
     Row(
         Modifier.padding(
-            start = tokens.spaceDp("lg", 16),
-            top = tokens.spaceDp("lg", 16),
-            end = tokens.spaceDp("lg", 16),
+            start = TokiSpacing.cardPadding,
+            top = TokiSpacing.cardPadding,
+            end = TokiSpacing.cardPadding,
         ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.size(tokens.spaceDp("md", 12)))
+        Spacer(Modifier.size(TokiSpacing.md))
         Text(title, style = MaterialTheme.typography.titleSmall)
     }
 }
@@ -228,11 +229,11 @@ private fun SettingRow(
     trailing: @Composable () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().height(60.dp).padding(horizontal = tokens.spaceDp("lg", 16)),
+        Modifier.fillMaxWidth().height(TokiSpacing.settingsRow).padding(horizontal = TokiSpacing.cardPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.size(tokens.spaceDp("md", 12)))
+        Spacer(Modifier.size(TokiSpacing.md))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             if (note != null) {
@@ -247,11 +248,11 @@ private fun SettingRow(
 @Composable
 private fun NavRow(tokens: SemanticTokens, icon: ImageVector, title: String, note: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(64.dp).clickable { onClick() }.padding(horizontal = tokens.spaceDp("lg", 16)),
+        Modifier.fillMaxWidth().height(TokiSpacing.settingsRow).clickable { onClick() }.padding(horizontal = TokiSpacing.cardPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.size(tokens.spaceDp("md", 12)))
+        Spacer(Modifier.size(TokiSpacing.md))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -346,7 +347,7 @@ private fun AppearancePage(
                 Column {
                     GroupHeader(tokens, Icons.Filled.DarkMode, "深浅色")
                     FlowRow(
-                        Modifier.fillMaxWidth().padding(tokens.spaceDp("lg", 16)),
+                        Modifier.fillMaxWidth().padding(TokiSpacing.cardPadding),
                         horizontalArrangement = Arrangement.spacedBy(tokens.spaceDp("sm", 8)),
                     ) {
                         ThemeMode.entries.forEach { mode ->
@@ -372,8 +373,8 @@ private fun AppearancePage(
                     )
                     GroupHeader(tokens, Icons.Filled.Palette, "种子色")
                     Row(
-                        Modifier.fillMaxWidth().padding(tokens.spaceDp("lg", 16)),
-                        horizontalArrangement = Arrangement.spacedBy(tokens.spaceDp("md", 12)),
+                        Modifier.fillMaxWidth().padding(TokiSpacing.cardPadding),
+                        horizontalArrangement = Arrangement.spacedBy(TokiSpacing.md),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         tokens.seeds.forEachIndexed { index, seed ->
@@ -448,7 +449,7 @@ private fun SearchEnginePage(
             SettingsGroup(cardShape) {
                 Column {
                     GroupHeader(tokens, Icons.Filled.Search, "搜索引擎")
-                    Column(Modifier.padding(tokens.spaceDp("lg", 16)), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    Column(Modifier.padding(TokiSpacing.cardPadding), verticalArrangement = Arrangement.spacedBy(gap)) {
                         Text(
                             "当前：${engine.displayName}",
                             style = MaterialTheme.typography.bodyMedium,
@@ -632,8 +633,8 @@ private fun UpdatePage(
         item {
             SettingsGroup(cardShape) {
                 Column(
-                    Modifier.padding(tokens.spaceDp("lg", 16)),
-                    verticalArrangement = Arrangement.spacedBy(tokens.spaceDp("md", 12)),
+                    Modifier.padding(TokiSpacing.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(TokiSpacing.md),
                 ) {
                     Text("当前版本", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("TokiDiscover ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleLarge)
@@ -644,6 +645,7 @@ private fun UpdatePage(
                     )
                     if (checking) LinearProgressIndicator(Modifier.fillMaxWidth())
                     Button(
+                        modifier = Modifier.height(56.dp),
                         enabled = !checking,
                         onClick = {
                             checking = true
@@ -693,15 +695,15 @@ private fun AboutPage(
                         )
                     })
                     Row(
-                        Modifier.fillMaxWidth().height(60.dp).clickable {
+                        Modifier.fillMaxWidth().height(TokiSpacing.settingsRow).clickable {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ichiyotsu/Tokidiscover")),
                             )
-                        }.padding(horizontal = tokens.spaceDp("lg", 16)),
+                        }.padding(horizontal = TokiSpacing.cardPadding),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.size(tokens.spaceDp("md", 12)))
+                        Spacer(Modifier.size(TokiSpacing.md))
                         Column(Modifier.weight(1f)) {
                             Text("TokiDiscover 仓库", style = MaterialTheme.typography.titleSmall)
                             Text(
@@ -717,7 +719,7 @@ private fun AboutPage(
         item {
             SettingsGroup(cardShape) {
                 Column(
-                    Modifier.padding(tokens.spaceDp("lg", 16)),
+                    Modifier.padding(TokiSpacing.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(tokens.spaceDp("sm", 8)),
                 ) {
                     Text("引擎是 Android 系统 WebView。", style = MaterialTheme.typography.bodyMedium)

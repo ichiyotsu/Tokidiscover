@@ -86,42 +86,72 @@ fun Modifier.tokiGlass(state: HazeState): Modifier {
 @Composable
 fun tokiChrome(state: HazeState, backdropBlur: Boolean): Modifier {
     return if (backdropBlur && TokiBlurCapability.canSampleInWindow) {
-        Modifier.tokiGlass(state)
+        Modifier.tokiGlass(state).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.22f))
     } else {
         Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
     }
+}
+
+/**
+ * Chrome for surfaces whose size changes (bottom-bar capsule, title chip):
+ * same frost as [tokiChrome], but sampled from the content source instead of
+ * the platform backdrop — backdrop sampling blackens the edges while a
+ * capsule animates its width; content sampling does not.
+ */
+@Composable
+fun tokiContentChrome(state: HazeState, backdropBlur: Boolean): Modifier {
+    return if (backdropBlur && TokiBlurCapability.canSampleInWindow) {
+        Modifier.tokiContentGlass(state).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.22f))
+    } else {
+        Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
+    }
+}
+
+/** Content-source glass (see [tokiContentChrome]); Haze 2.0.1 API. */
+@Composable
+fun Modifier.tokiContentGlass(state: HazeState): Modifier {
+    val dark = LocalDarkTheme.current
+    return hazeBlur(
+        input = HazeInput.Sources(state),
+        style = tokiBlurStyle(dark),
+        performanceMode = HazePerformanceMode.Quality,
+    )
 }
 
 fun solidChrome(backdropBlur: Boolean): Boolean =
     !(backdropBlur && TokiBlurCapability.canSampleInWindow)
 
 /**
- * Scroll chip behind a large title or back button.
- * Frosted chips are only the shared blur layer. Solid chips are surfaceContainer plus the 3dp primary stroke.
+ * Scroll chip behind a large title or back button. The frost is always on:
+ * it no longer fades in/out with scroll position (the old cover animation
+ * kept losing the blur in 0.1.7/0.1.8/0.1.9). Content-source sampling so
+ * the frost survives size changes; a light surface tint plus a hairline
+ * outline keep the title readable on any background. Without sampling it
+ * is an opaque surfaceContainer with the 3dp primary stroke.
  */
 @Composable
 fun TokiScrollChipBackdrop(
     shape: Shape,
-    cover: Float,
     backdropBlur: Boolean,
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
-    applyBlur: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val frosted = backdropBlur && TokiBlurCapability.canSampleInWindow
-    val canBlur = applyBlur && hazeState != null && cover > 0.01f && frosted
     Box(
         modifier
             .clip(shape)
-            .then(if (canBlur) Modifier.tokiGlass(hazeState) else Modifier)
             .then(
-                if (!frosted && cover > 0f) {
+                if (frosted && hazeState != null) {
+                    Modifier.tokiContentGlass(hazeState)
+                        .background(scheme.surfaceContainer.copy(alpha = 0.24f))
+                        .border(1.dp, scheme.outlineVariant.copy(alpha = 0.45f), shape)
+                } else if (!frosted) {
                     Modifier
-                        .background(scheme.surfaceContainer.copy(alpha = cover))
-                        .border(TokiChromeStroke.width, scheme.primary.copy(alpha = cover), shape)
+                        .background(scheme.surfaceContainer)
+                        .border(TokiChromeStroke.width, scheme.primary, shape)
                 } else {
-                    Modifier
+                    Modifier.background(scheme.surfaceContainer.copy(alpha = 0.24f))
                 },
             ),
     )

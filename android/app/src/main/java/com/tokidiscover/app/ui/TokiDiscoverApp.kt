@@ -57,7 +57,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,16 +65,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -93,12 +89,13 @@ import com.tokidiscover.app.ui.browser.TabsScreen
 import com.tokidiscover.app.ui.components.DiscoverOmnibox
 import com.tokidiscover.app.ui.components.MoreMenuPanel
 import com.tokidiscover.app.ui.components.NavEntry
-import com.tokidiscover.app.ui.components.OverlayTitle
+import com.tokidiscover.app.ui.components.OverlayTitleHeader
 import com.tokidiscover.app.ui.theme.ThemeMode
 import com.tokidiscover.app.ui.theme.TokiDiscoverTheme
 import com.tokidiscover.app.ui.theme.colorFromHex
 import com.tokidiscover.app.ui.theme.solidChrome
-import com.tokidiscover.app.ui.theme.tokiChrome
+import com.tokidiscover.app.ui.theme.tokiContentChrome
+import com.tokidiscover.app.ui.theme.tokiPageBackground
 import com.tokiui.semantic.SemanticTokens
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -209,7 +206,7 @@ private fun DiscoverShell(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val hazeState = rememberHazeState()
-    val glass = tokiChrome(hazeState, backdropBlur)
+    val glass = tokiContentChrome(hazeState, backdropBlur)
     var destName by rememberSaveable { mutableStateOf(Dest.Browser.name) }
     val dest = runCatching { Dest.valueOf(destName) }.getOrDefault(Dest.Browser)
     fun select(next: Dest) { destName = next.name }
@@ -218,28 +215,15 @@ private fun DiscoverShell(
     var collapsed by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
-    var editNonce by remember { mutableIntStateOf(0) }
     var findVisible by rememberSaveable { mutableStateOf(false) }
     var findQuery by rememberSaveable { mutableStateOf("") }
     var pendingWebPermission by remember { mutableStateOf<PendingWebPermission?>(null) }
     var resolvingWebPermission by remember { mutableStateOf<PendingWebPermission?>(null) }
     var rendererEpoch by remember { mutableIntStateOf(0) }
     val hostRef = remember { mutableStateOf<TabWebHost?>(null) }
-    val headerOffset = remember { mutableFloatStateOf(0f) }
-    val nested = remember {
-        object : NestedScrollConnection {
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                headerOffset.floatValue = headerScrollOffset(headerOffset.floatValue, consumed.y, available.y)
-                return Offset.Zero
-            }
-
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (available.y > 0f) headerOffset.floatValue = 0f
-                return Velocity.Zero
-            }
-        }
-    }
-    val overlapped = headerOverlapsContent(headerOffset.floatValue, with(density) { 8.dp.toPx() })
+    // The header frost is always on (0.1.10), so pages no longer report a
+    // scroll offset; the connection stays only as a nested-scroll hook.
+    val nested = remember { object : NestedScrollConnection {} }
     val showingPage = dest == Dest.Browser && vm.activeTab.url != UrlNormalizer.NEW_TAB_URL
     val title = if (dest == Dest.Settings && settingsPage != SettingsPage.Main) {
         settingsPageTitle(settingsPage)
@@ -294,7 +278,6 @@ private fun DiscoverShell(
     fun toast(message: String) { scope.launch { snackbar.showSnackbar(message) } }
 
     LaunchedEffect(dest, vm.activeTabId) {
-        headerOffset.floatValue = 0f
         collapsed = false
         editing = false
         findVisible = false
@@ -312,7 +295,7 @@ private fun DiscoverShell(
     }
     BackHandler(enabled = menuExpanded) { menuExpanded = false }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(tokiPageBackground())) {
         val wide = maxWidth >= ExpandedWindow
         Row(Modifier.fillMaxSize()) {
             if (wide) {
@@ -337,7 +320,7 @@ private fun DiscoverShell(
                     Modifier
                         .fillMaxSize()
                         .hazeSource(hazeState)
-                        .background(MaterialTheme.colorScheme.surface),
+                        .background(tokiPageBackground()),
                 ) {
                     AndroidView(
                         factory = { ctx -> TabWebHost(ctx).also { hostRef.value = it } },
@@ -428,18 +411,17 @@ private fun DiscoverShell(
                     }
                 }
                 if (!showingPage) {
-                    OverlayTitle(
+                    OverlayTitleHeader(
                         title = title,
-                        overlapped = overlapped,
-                        backdropBlur = backdropBlur,
-                        hazeState = hazeState,
-                        onHeight = { topBarHeight = it },
-                        modifier = Modifier.align(Alignment.TopCenter),
                         onBack = if (dest == Dest.Settings && settingsPage != SettingsPage.Main) {
                             { settingsPageName = SettingsPage.Main.name }
                         } else {
                             null
                         },
+                        onHeightMeasured = { topBarHeight = it },
+                        backdropBlur = backdropBlur,
+                        hazeState = hazeState,
+                        modifier = Modifier.align(Alignment.TopCenter),
                     )
                 }
                 if (menuExpanded) {
@@ -525,19 +507,21 @@ private fun DiscoverShell(
                         }
                         DiscoverOmnibox(
                             tab = vm.activeTab,
+                            showingPage = showingPage,
                             collapsed = collapsed,
-                            compactMode = !showingPage,
-                            editRequest = editNonce,
                             reduceMotion = reduceMotion,
                             tabCount = vm.tabs.size,
                             glass = glass,
+                            solidStroke = solidChrome(backdropBlur),
+                            entries = navEntries,
+                            current = dest,
+                            onSelectDest = { select(it) },
                             onSubmit = { vm.submitOmnibox(it) },
                             onBack = { hostRef.value?.controller?.back() },
                             onForward = { hostRef.value?.controller?.forward() },
                             onReloadOrStop = { hostRef.value?.controller?.reloadOrStop(vm.activeTab.progress in 1..99) },
                             onTabs = { select(Dest.Tabs) },
                             onMenuClick = { menuExpanded = !menuExpanded },
-                            onAddressTap = { select(Dest.Browser); editNonce++ },
                             onEditing = { editing = it },
                             onExpand = { collapsed = false },
                             modifier = Modifier.fillMaxWidth(),

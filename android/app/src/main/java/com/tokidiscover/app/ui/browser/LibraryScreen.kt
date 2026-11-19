@@ -30,6 +30,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tokidiscover.app.ui.theme.TokiSpacing
 import com.tokidiscover.app.ui.BrowserViewModel
 import com.tokidiscover.app.ui.components.LongPressLabel
 import java.text.SimpleDateFormat
@@ -52,7 +53,7 @@ fun LibraryScreen(
         Modifier
             .fillMaxSize()
             .padding(top = topPadding, bottom = bottomPadding)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = TokiSpacing.pageMargin),
     ) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             sections.forEachIndexed { index, label ->
