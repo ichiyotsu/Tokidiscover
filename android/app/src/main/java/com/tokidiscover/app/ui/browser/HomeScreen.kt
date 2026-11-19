@@ -4,14 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,18 +41,14 @@ import com.tokidiscover.app.data.DefaultSpeedDial
 import com.tokidiscover.app.data.SpeedDialSite
 import com.tokidiscover.app.ui.BrowserViewModel
 import com.tokidiscover.app.ui.theme.TokiSpacing
-import kotlin.math.absoluteValue
-
-private val shortcutTileColors = listOf(
-    0xFF7FB069.toInt(), 0xFF6A8DFF.toInt(), 0xFFE8A33D.toInt(),
-    0xFF9B7EDE.toInt(), 0xFFE06C5B.toInt(), 0xFF4DB6AC.toInt(),
-)
 
 /**
- * Chrome-style new-tab page, restyled with TokiUI 0.1.10 tokens: a big search
- * pill on top, then the Speed Dial shortcuts row and the recent list. No
- * pill buttons under the search pill: Chrome's "AI 模式" is Chrome's own
- * feature and is deliberately not copied, and 无痕 lives in the ⋮ menu only.
+ * Chrome-style new-tab page, restyled with TokiUI 0.1.11 tokens: the title
+ * lives in the unified frosted header pill ("TokiDiscover", top-left), then
+ * a big search pill, then the Speed Dial shortcuts as pill chips in
+ * wrapping rows, then the recent list. No pill buttons under the search
+ * pill: Chrome's "AI 模式" is Chrome's own feature and is deliberately
+ * not copied, and 无痕 lives in the ⋮ menu only.
  */
 @Composable
 fun HomeScreen(
@@ -113,12 +106,15 @@ fun HomeScreen(
         if (vm.settings.showSpeedDial) {
             item { Text("常用站点", style = MaterialTheme.typography.titleMedium) }
             item {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(TokiSpacing.cardSpacing),
+                // Shortcut pills in wrapping rows (was a horizontal-scrolling
+                // row of round letter tiles): same sites, same navigation.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(DefaultSpeedDial, key = { it.url }) { site ->
-                        ShortcutTile(site) { vm.navigate(site.url) }
+                    DefaultSpeedDial.forEach { site ->
+                        ShortcutChip(site) { vm.navigate(site.url) }
                     }
                 }
             }
@@ -146,36 +142,23 @@ fun HomeScreen(
     }
 }
 
+/** A Speed Dial site as a pill chip: site name on surfaceContainerHigh. */
 @Composable
-private fun ShortcutTile(site: SpeedDialSite, onClick: () -> Unit) {
-    val color = Color(shortcutTileColors[(site.title.hashCode().absoluteValue) % shortcutTileColors.size])
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+private fun ShortcutChip(site: SpeedDialSite, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(48.dp)
             .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { onClick() }
-            .padding(4.dp),
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(color),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                site.title.firstOrNull()?.toString().orEmpty(),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-            )
-        }
         Text(
             site.title,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }

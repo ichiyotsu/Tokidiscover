@@ -1,23 +1,20 @@
 package com.tokidiscover.app.ui
 
 /**
- * The three shapes of the bottom bar (TokiStudio 0.1.10 redesign):
+ * The two shapes of the bottom bar (TokiUI 0.1.11 redesign):
  * - [Nav]: the regular floating glass capsule nav, on the home page and
  *   the app destinations (tabs, library, settings).
- * - [FunctionBar]: on a website, the URL/function bar — outer glass
- *   capsule, inner pill with the full URL.
- * - [Capsule]: while scrolling a website, the function bar shrinks to a
- *   draggable capsule showing only the main domain.
+ * - [Capsule]: on a website — a draggable capsule showing only the main
+ *   domain. The old function bar (URL pill + back/forward/reload/tabs/
+ *   menu) is gone: the address field lives in the top omnibox pill and
+ *   the page actions live in the right-side toolbar, so the bottom never
+ *   repeats function buttons.
  */
-enum class BottomBarState { Nav, FunctionBar, Capsule }
+enum class BottomBarState { Nav, Capsule }
 
-/** Which bottom-bar shape to show. Editing always opens the function bar. */
-fun bottomBarState(showingPage: Boolean, collapsed: Boolean, editing: Boolean): BottomBarState = when {
-    editing && showingPage -> BottomBarState.FunctionBar
-    !showingPage -> BottomBarState.Nav
-    collapsed -> BottomBarState.Capsule
-    else -> BottomBarState.FunctionBar
-}
+/** Which bottom-bar shape to show: the domain capsule on a website, the nav capsule elsewhere. */
+fun bottomBarState(showingPage: Boolean): BottomBarState =
+    if (showingPage) BottomBarState.Capsule else BottomBarState.Nav
 
 /** Main domain shown in the collapsed capsule: the URL host without a leading "www.". */
 fun mainDomain(url: String): String {

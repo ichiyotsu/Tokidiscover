@@ -33,6 +33,8 @@ import com.tokidiscover.app.data.SchemePolicy
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.data.WebPermissionPolicy
 import com.tokidiscover.app.ui.BrowserViewModel
+import com.tokidiscover.app.ui.components.ContentEdge
+import kotlin.math.roundToInt
 
 private const val DESKTOP_UA =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
@@ -67,6 +69,19 @@ h1 { font-size: 20px; }
 /** Keeps one WebView per tab so switching tabs does not throw the page away. */
 @SuppressLint("SetJavaScriptEnabled")
 class TabWebHost(context: Context) : FrameLayout(context) {
+    init {
+        // Fixed bottom inset (ContentEdge): the WebView viewport ends
+        // webBottomInset() above the screen bottom so page content can
+        // scroll fully above the floating bottom bar. FrameLayout padding
+        // only shrinks the children's layout area — the host itself stays
+        // fillMaxSize and the value is set once here, never changed, so
+        // the WebView never resizes during navigation or scrolling (the
+        // old resize-on-navigation repaint flicker stays fixed).
+        val insetPx = (ContentEdge.webBottomInset().value * resources.displayMetrics.density)
+            .roundToInt()
+        setPadding(0, 0, 0, insetPx)
+    }
+
     var controller = WebController()
     private val views = linkedMapOf<String, WebView>()
     private val requested = mutableMapOf<String, String>()

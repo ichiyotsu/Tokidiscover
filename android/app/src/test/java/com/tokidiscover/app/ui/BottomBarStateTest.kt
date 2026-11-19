@@ -5,20 +5,13 @@ import org.junit.Test
 
 class BottomBarStateTest {
     @Test
-    fun homeAndAppPagesShowTheRegularNavBar() {
-        assertEquals(BottomBarState.Nav, bottomBarState(showingPage = false, collapsed = false, editing = false))
-        assertEquals(BottomBarState.Nav, bottomBarState(showingPage = false, collapsed = true, editing = false))
+    fun websiteShowsOnlyTheDomainCapsule() {
+        assertEquals(BottomBarState.Capsule, bottomBarState(showingPage = true))
     }
 
     @Test
-    fun websiteShowsTheFunctionBarUntilScrolled() {
-        assertEquals(BottomBarState.FunctionBar, bottomBarState(showingPage = true, collapsed = false, editing = false))
-        assertEquals(BottomBarState.Capsule, bottomBarState(showingPage = true, collapsed = true, editing = false))
-    }
-
-    @Test
-    fun editingAlwaysOpensTheFunctionBarOnAWebsite() {
-        assertEquals(BottomBarState.FunctionBar, bottomBarState(showingPage = true, collapsed = true, editing = true))
+    fun appPagesShowTheRegularNavBar() {
+        assertEquals(BottomBarState.Nav, bottomBarState(showingPage = false))
     }
 
     @Test

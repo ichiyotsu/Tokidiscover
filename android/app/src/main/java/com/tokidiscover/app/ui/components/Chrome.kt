@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -49,9 +50,11 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -86,6 +89,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -458,15 +463,14 @@ private fun MenuActionRow(label: String, icon: ImageVector, onClick: () -> Unit)
 }
 
 /**
- * The bottom bar in its three shapes (TokiStudio 0.1.10 redesign):
+ * The bottom bar in its two shapes (TokiUI 0.1.11 redesign):
  * - [BottomBarState.Nav]: the regular floating glass capsule nav, on the
  *   home page and the app destinations.
- * - [BottomBarState.FunctionBar]: on a website — outer glass capsule,
- *   inner pill with the full URL, back/forward/reload/tabs/menu around it.
- *   Tapping the pill swaps it for the address field.
- * - [BottomBarState.Capsule]: while scrolling a website — the bar shrinks
- *   to a draggable capsule showing only the main domain; tapping expands
- *   it back to the function bar.
+ * - [BottomBarState.Capsule]: on a website — a draggable capsule showing
+ *   only the main domain. Tapping it opens the top omnibox pill for
+ *   editing. The address field and the page actions no longer live here:
+ *   the address field is the top omnibox pill, the actions are the
+ *   right-side toolbar.
  * The regular bar slides down out of the way when a website opens.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -474,38 +478,27 @@ private fun MenuActionRow(label: String, icon: ImageVector, onClick: () -> Unit)
 fun DiscoverOmnibox(
     tab: BrowserTab,
     showingPage: Boolean,
-    collapsed: Boolean,
     reduceMotion: Boolean,
-    tabCount: Int,
     glass: Modifier,
     solidStroke: Boolean,
     entries: List<NavEntry>,
     current: Dest,
     onSelectDest: (Dest) -> Unit,
-    onSubmit: (String) -> Unit,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onReloadOrStop: () -> Unit,
-    onTabs: () -> Unit,
-    onMenuClick: () -> Unit,
-    onEditing: (Boolean) -> Unit,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var editing by remember(tab.id) { mutableStateOf(false) }
-    var draft by remember(tab.id) { mutableStateOf("") }
     val loading = tab.progress in 1..99
     val domain = mainDomain(tab.url)
     val motion = MaterialTheme.motionScheme
 
     // Capsule dock state lives above AnimatedContent so a drag offset survives
-    // the expand/collapse transitions. The dock persists across recreation.
+    // the state transitions. The dock persists across recreation.
     var dockName by rememberSaveable { mutableStateOf(CapsuleDock.Center.name) }
     val dock = runCatching { CapsuleDock.valueOf(dockName) }.getOrDefault(CapsuleDock.Center)
     val capsuleOffset = remember { Animatable(0f) }
     val dragScope = rememberCoroutineScope()
 
-    val state = bottomBarState(showingPage, collapsed, editing)
+    val state = bottomBarState(showingPage)
 
     Column(modifier.fillMaxWidth()) {
         if (loading && showingPage) {
@@ -540,93 +533,6 @@ fun DiscoverOmnibox(
                         solidStroke = solidStroke,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                }
-                BottomBarState.FunctionBar -> {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(72.dp)
-                            .clip(CircleShape)
-                            .then(glass)
-                            .then(
-                                if (solidStroke) {
-                                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, CircleShape)
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        LongPressLabel("后退") {
-                            IconButton(onClick = onBack, enabled = tab.canGoBack, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "后退")
-                            }
-                        }
-                        LongPressLabel("前进") {
-                            IconButton(onClick = onForward, enabled = tab.canGoForward, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "前进")
-                            }
-                        }
-                        if (editing) {
-                            androidx.compose.material3.TextField(
-                                value = draft,
-                                onValueChange = { draft = it },
-                                singleLine = true,
-                                placeholder = { Text("搜索或输入网址") },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                                keyboardActions = KeyboardActions(onGo = {
-                                    onSubmit(draft)
-                                    editing = false
-                                    onEditing(false)
-                                }),
-                                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                ),
-                                modifier = Modifier.weight(1f),
-                            )
-                        } else {
-                            Box(
-                                Modifier
-                                    .weight(1f)
-                                    .height(56.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                    .clickable {
-                                        editing = true
-                                        draft = if (tab.url == UrlNormalizer.NEW_TAB_URL) "" else tab.url
-                                        onEditing(true)
-                                    }
-                                    .padding(horizontal = 16.dp),
-                                contentAlignment = Alignment.CenterStart,
-                            ) {
-                                Text(
-                                    text = (if (tab.isPrivate) "无痕 · " else "") +
-                                        if (tab.url == UrlNormalizer.NEW_TAB_URL) "搜索或输入网址" else tab.url,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                        LongPressLabel(if (loading) "停止" else "刷新") {
-                            IconButton(onClick = onReloadOrStop, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
-                                    contentDescription = if (loading) "停止" else "刷新",
-                                )
-                            }
-                        }
-                        LongPressLabel("页面菜单") {
-                            IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "页面菜单")
-                            }
-                        }
-                        TabCountButton(tabCount, onTabs)
-                    }
                 }
                 BottomBarState.Capsule -> {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -709,26 +615,170 @@ fun DiscoverOmnibox(
 }
 
 
+/** Text shown in the top omnibox pill: the full URL, or the placeholder on a new tab. */
+fun topOmniboxText(tab: BrowserTab): String =
+    (if (tab.isPrivate) "无痕 · " else "") +
+        if (tab.url == UrlNormalizer.NEW_TAB_URL) "搜索或输入网址" else tab.url
+
+/**
+ * The top floating omnibox pill on a website (TokiUI 0.1.11): one glass
+ * capsule with the page URL — tapping it swaps in the address field —
+ * and the ⋮ button that opens the page menu below it. The bottom bar no
+ * longer carries the address field.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun TabCountButton(tabCount: Int, onTabs: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val label = "标签页，共 $tabCount 个"
-    LongPressLabel(label) {
+fun TopOmniboxPill(
+    tab: BrowserTab,
+    editing: Boolean,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onEditRequest: () -> Unit,
+    onSubmit: (String) -> Unit,
+    onEditingChange: (Boolean) -> Unit,
+    onMenuClick: () -> Unit,
+    glass: Modifier,
+    solidStroke: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(editing) {
+        if (editing) focusRequester.requestFocus()
+    }
     Row(
-        Modifier
-            .height(48.dp)
+        modifier
+            .fillMaxWidth()
+            .height(56.dp)
             .clip(CircleShape)
-            .clickable(interactionSource = interaction, indication = ripple()) { onTabs() }
-            .padding(horizontal = 8.dp),
+            .then(glass)
+            .then(
+                if (solidStroke) {
+                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, CircleShape)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Outlined.Tab,
-            contentDescription = label,
-            modifier = Modifier.size(22.dp),
+            Icons.Filled.Search,
+            contentDescription = null,
+            modifier = Modifier.padding(start = 12.dp).size(24.dp),
         )
-        Spacer(Modifier.width(4.dp))
-        Text("$tabCount", style = MaterialTheme.typography.labelLarge)
+        if (editing) {
+            androidx.compose.material3.TextField(
+                value = draft,
+                onValueChange = onDraftChange,
+                singleLine = true,
+                placeholder = { Text("搜索或输入网址") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = {
+                    onSubmit(draft)
+                    onEditingChange(false)
+                }),
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                modifier = Modifier.weight(1f).focusRequester(focusRequester),
+            )
+        } else {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { onEditRequest() }
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = topOmniboxText(tab),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        LongPressLabel("页面菜单") {
+            IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "页面菜单")
+            }
+        }
     }
+}
+
+/**
+ * The vertical floating toolbar on the right edge of a website (TokiUI
+ * 0.1.11): one glass capsule with the page actions that used to live in
+ * the bottom function bar — back, forward, home, find in page, tabs,
+ * bookmark, history, refresh, share, settings. Every icon is wired to a
+ * ⋮ menu stays in the top omnibox pill. No avatar/profile entry: that
+ * was the reference browser's own account button, not a feature here.
+ */
+@Composable
+fun SideToolbar(
+    bookmarked: Boolean,
+    loading: Boolean,
+    canGoBack: Boolean,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onHome: () -> Unit,
+    onFind: () -> Unit,
+    onTabs: () -> Unit,
+    onBookmark: () -> Unit,
+    onHistory: () -> Unit,
+    onReloadOrStop: () -> Unit,
+    onShare: () -> Unit,
+    onSettings: () -> Unit,
+    glass: Modifier,
+    solidStroke: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(percent = 50)
+    Column(
+        modifier
+            .clip(shape)
+            .then(glass)
+            .then(
+                if (solidStroke) {
+                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SideToolButton("后退", Icons.AutoMirrored.Filled.ArrowBack, onBack, enabled = canGoBack)
+        SideToolButton("前进", Icons.AutoMirrored.Filled.ArrowForward, onForward, enabled = canGoForward)
+        SideToolButton("主页", Icons.Filled.Home, onHome)
+        SideToolButton("页内查找", Icons.Outlined.FindInPage, onFind)
+        SideToolButton("标签页", Icons.Outlined.Tab, onTabs)
+        SideToolButton(
+            if (bookmarked) "已收藏" else "收藏",
+            if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+            onBookmark,
+        )
+        SideToolButton("历史记录", Icons.Filled.History, onHistory)
+        SideToolButton(
+            if (loading) "停止" else "刷新",
+            if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
+            onReloadOrStop,
+        )
+        SideToolButton("分享", Icons.Outlined.Share, onShare)
+        SideToolButton("设置", Icons.Filled.Settings, onSettings)
+    }
+}
+
+@Composable
+private fun SideToolButton(label: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
+    LongPressLabel(label) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+            Icon(icon, contentDescription = label)
+        }
     }
 }
