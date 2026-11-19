@@ -12,20 +12,28 @@ import com.tokidiscover.app.data.BrowserTab
 import com.tokidiscover.app.data.ClosedTab
 import com.tokidiscover.app.data.DownloadRecord
 import com.tokidiscover.app.data.Downloads
+import com.tokidiscover.app.data.FunctionBarComponent
 import com.tokidiscover.app.data.NavResult
+import com.tokidiscover.app.data.SpeedDialSite
 import com.tokidiscover.app.data.TabGroup
 import com.tokidiscover.app.data.TabSnapshot
 import com.tokidiscover.app.data.UrlNormalizer
 import com.tokidiscover.app.data.addTabToGroup
 import com.tokidiscover.app.data.closeTabGroup
 import com.tokidiscover.app.data.createTabGroup
+import com.tokidiscover.app.data.decodeFunctionBarItems
+import com.tokidiscover.app.data.decodeSpeedDial
 import com.tokidiscover.app.data.decodeTabGroups
 import com.tokidiscover.app.data.deleteTabGroup
+import com.tokidiscover.app.data.encodeFunctionBarItems
+import com.tokidiscover.app.data.encodeSpeedDial
 import com.tokidiscover.app.data.encodeTabGroups
 import com.tokidiscover.app.data.groupOfTab
+import com.tokidiscover.app.data.moveFunctionBarItem
 import com.tokidiscover.app.data.recordClosedTab
 import com.tokidiscover.app.data.removeTabFromGroup
 import com.tokidiscover.app.data.renameTabGroup
+import com.tokidiscover.app.data.sanitizeFunctionBarItems
 
 /** Owns the in-memory tab list and library. One WebView per tab is kept by the browser host until the tab closes. */
 class BrowserViewModel(app: Application) : AndroidViewModel(app) {
@@ -116,6 +124,66 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var history by mutableStateOf(library.history)
         private set
+    /** Speed Dial sites, restored from storage (defaults when nothing custom is saved). */
+    var speedDial by mutableStateOf(decodeSpeedDial(library.speedDialJson))
+        private set
+    /** Bottom function bar layout, restored from storage. */
+    var functionBarItems by mutableStateOf(decodeFunctionBarItems(settings.functionBarJson))
+        private set
+
+    /**
+     * Add a Speed Dial site. The input is normalized like an omnibox entry
+     * (a bare host becomes https://…, a search phrase becomes the search
+     * URL); blank title falls back to the host. Returns false when the
+     * input is not navigable or the URL is already on the dial.
+     */
+    fun addSpeedDial(title: String, input: String): Boolean {
+        val url = when (val result = UrlNormalizer.normalize(input.trim(), settings.engine(), settings.customTemplate)) {
+            is NavResult.Url -> result.url
+            is NavResult.Search -> result.url
+            NavResult.NewTab -> return false
+            is NavResult.Blocked -> return false
+        }
+        if (speedDial.any { it.url == url }) return false
+        val name = title.trim().ifBlank { url.substringAfter("://", url).substringBefore('/').ifBlank { url } }
+        speedDial = speedDial + SpeedDialSite(name, url)
+        library.speedDialJson = encodeSpeedDial(speedDial)
+        return true
+    }
+
+    fun removeSpeedDial(site: SpeedDialSite) {
+        speedDial = speedDial.filterNot { it.url == site.url }
+        library.speedDialJson = encodeSpeedDial(speedDial)
+    }
+
+    private fun saveFunctionBar() {
+        settings.functionBarJson = encodeFunctionBarItems(functionBarItems)
+    }
+
+    fun updateFunctionBarItems(items: List<FunctionBarComponent>) {
+        functionBarItems = sanitizeFunctionBarItems(items)
+        saveFunctionBar()
+    }
+
+    fun moveFunctionBarComponent(from: Int, to: Int) {
+        val moved = moveFunctionBarItem(functionBarItems, from, to)
+        if (moved != functionBarItems) {
+            functionBarItems = moved
+            saveFunctionBar()
+        }
+    }
+
+    /** Show/hide one bar component. Settings can never be hidden. */
+    fun setFunctionBarComponentVisible(component: FunctionBarComponent, visible: Boolean) {
+        if (component == FunctionBarComponent.Settings) return
+        val updated = if (visible) {
+            if (component in functionBarItems) functionBarItems else functionBarItems + component
+        } else {
+            functionBarItems - component
+        }
+        updateFunctionBarItems(updated)
+    }
+
     val downloads = mutableStateListOf<DownloadRecord>()
     var pendingNavigation by mutableStateOf<String?>(null)
     var blockedMessage by mutableStateOf<String?>(null)

@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
@@ -93,8 +92,8 @@ import com.tokidiscover.app.ui.components.DiscoverOmnibox
 import com.tokidiscover.app.ui.components.MoreMenuPanel
 import com.tokidiscover.app.ui.components.NavEntry
 import com.tokidiscover.app.ui.components.OverlayTitleHeader
-import com.tokidiscover.app.ui.components.SideToolbar
-import com.tokidiscover.app.ui.components.TopOmniboxPill
+import com.tokidiscover.app.ui.components.SettingsPageDropdown
+import com.tokidiscover.app.ui.browser.label
 import com.tokidiscover.app.ui.theme.ThemeMode
 import com.tokidiscover.app.ui.theme.TokiDiscoverTheme
 import com.tokidiscover.app.ui.theme.colorFromHex
@@ -114,16 +113,6 @@ private val navEntries = listOf(
 )
 
 private val ExpandedWindow = 840.dp
-
-private fun settingsPageTitle(page: SettingsPage): String = when (page) {
-    SettingsPage.Main -> "设置"
-    SettingsPage.Appearance -> "外观"
-    SettingsPage.SearchEngine -> "搜索引擎"
-    SettingsPage.Browsing -> "浏览"
-    SettingsPage.ClearData -> "清除浏览数据"
-    SettingsPage.Update -> "更新"
-    SettingsPage.About -> "关于"
-}
 
 /** A page's permission request waiting on the user, then on the system prompt. */
 private sealed interface PendingWebPermission {
@@ -221,10 +210,9 @@ private fun DiscoverShell(
     /** Which Library section the ⋮ menu asked for (0 书签 / 1 历史 / 2 下载). */
     var librarySection by rememberSaveable { mutableIntStateOf(0) }
     val settingsPage = runCatching { SettingsPage.valueOf(settingsPageName) }.getOrDefault(SettingsPage.Main)
-    /** Top omnibox pill editing state, hoisted so the bottom domain capsule can open it. Reset per tab. */
-    var omniboxEditing by remember(vm.activeTabId) { mutableStateOf(false) }
-    var omniboxDraft by remember(vm.activeTabId) { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
+    /** The Settings title switcher dropdown (same panel as the ⋮ menu). */
+    var settingsTitleMenuExpanded by remember { mutableStateOf(false) }
     var findVisible by rememberSaveable { mutableStateOf(false) }
     var findQuery by rememberSaveable { mutableStateOf("") }
     var pendingWebPermission by remember { mutableStateOf<PendingWebPermission?>(null) }
@@ -236,7 +224,7 @@ private fun DiscoverShell(
     val nested = remember { object : NestedScrollConnection {} }
     val showingPage = dest == Dest.Browser && vm.activeTab.url != UrlNormalizer.NEW_TAB_URL
     val title = if (dest == Dest.Settings && settingsPage != SettingsPage.Main) {
-        settingsPageTitle(settingsPage)
+        settingsPage.label()
     } else {
         when (dest) {
             Dest.Browser -> if (vm.activeTab.isPrivate) "无痕浏览" else "TokiDiscover"
@@ -286,10 +274,6 @@ private fun DiscoverShell(
         hostRef.value?.controller?.deliverFileChooserResult(uris.takeIf { it.isNotEmpty() }?.toTypedArray())
     }
     fun toast(message: String) { scope.launch { snackbar.showSnackbar(message) } }
-    fun startOmniboxEditing() {
-        omniboxDraft = if (vm.activeTab.url == UrlNormalizer.NEW_TAB_URL) "" else vm.activeTab.url
-        omniboxEditing = true
-    }
     fun sharePage() {
         val send = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
@@ -298,9 +282,9 @@ private fun DiscoverShell(
     }
 
     LaunchedEffect(dest, vm.activeTabId) {
-        omniboxEditing = false
         findVisible = false
         menuExpanded = false
+        settingsTitleMenuExpanded = false
         pendingWebPermission?.deny()
         pendingWebPermission = null
         settingsPageName = pendingSettingsPageName ?: SettingsPage.Main.name
@@ -314,7 +298,7 @@ private fun DiscoverShell(
         settingsPageName = SettingsPage.Main.name
     }
     BackHandler(enabled = menuExpanded) { menuExpanded = false }
-    BackHandler(enabled = omniboxEditing) { omniboxEditing = false }
+    BackHandler(enabled = settingsTitleMenuExpanded) { settingsTitleMenuExpanded = false }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(tokiPageBackground())) {
         val wide = maxWidth >= ExpandedWindow
@@ -468,7 +452,42 @@ private fun DiscoverShell(
                         backdropBlur = backdropBlur,
                         hazeState = hazeState,
                         modifier = Modifier.align(Alignment.TopCenter),
+                        // On Settings, tapping the title opens the page
+                        // switcher (same dropdown panel as the ⋮ menu).
+                        onTitleClick = if (dest == Dest.Settings) {
+                            { settingsTitleMenuExpanded = true }
+                        } else {
+                            null
+                        },
+                        reduceMotion = reduceMotion,
                     )
+                }
+                if (settingsTitleMenuExpanded) {
+                    // Tapping anywhere outside the switcher dismisses it.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { settingsTitleMenuExpanded = false },
+                    )
+                    Box(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = topBarHeight + 8.dp, start = 12.dp, end = 12.dp)
+                            .widthIn(max = 840.dp),
+                    ) {
+                        SettingsPageDropdown(
+                            current = settingsPage,
+                            onSelect = {
+                                settingsPageName = it.name
+                                settingsTitleMenuExpanded = false
+                            },
+                            glass = glass,
+                            solidStroke = solidChrome(backdropBlur),
+                        )
+                    }
                 }
                 if (menuExpanded) {
                     // Tapping anywhere outside the menu dismisses it.
@@ -481,66 +500,50 @@ private fun DiscoverShell(
                             ) { menuExpanded = false },
                     )
                 }
-                if (showingPage) {
-                    // Top floating chrome on a website: the omnibox pill,
-                    // then the find row and the page menu dropping down from
-                    // it. The ⋮ button lives in the pill; the panel used to
-                    // rise from the bottom bar.
-                    Column(
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .statusBarsPadding()
-                            .padding(top = 8.dp, start = 12.dp, end = 12.dp)
-                            .widthIn(max = 840.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TopOmniboxPill(
-                            tab = vm.activeTab,
-                            editing = omniboxEditing,
-                            draft = omniboxDraft,
-                            onDraftChange = { omniboxDraft = it },
-                            onEditRequest = { startOmniboxEditing() },
-                            onSubmit = { vm.submitOmnibox(it); omniboxEditing = false },
-                            onEditingChange = { omniboxEditing = it },
-                            onMenuClick = { menuExpanded = !menuExpanded },
-                            glass = glass,
-                            solidStroke = solidChrome(backdropBlur),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (findVisible) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.extraLarge)
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                TextField(
-                                    value = findQuery,
-                                    onValueChange = {
-                                        findQuery = it
-                                        hostRef.value?.controller?.find(it)
-                                    },
-                                    label = { Text("在页面中查找") },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(onSearch = { hostRef.value?.controller?.findNext() }),
-                                    modifier = Modifier.weight(1f),
-                                )
-                                TextButton(onClick = { hostRef.value?.controller?.findNext() }) { Text("下一个") }
-                                TextButton(onClick = {
-                                    findVisible = false
-                                    hostRef.value?.controller?.clearMatches()
-                                }) { Text("关闭") }
-                            }
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
+                        .padding(bottom = insetBottom + 8.dp, start = 12.dp, end = 12.dp)
+                        .widthIn(max = 840.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (findVisible && showingPage) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.extraLarge)
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextField(
+                                value = findQuery,
+                                onValueChange = {
+                                    findQuery = it
+                                    hostRef.value?.controller?.find(it)
+                                },
+                                label = { Text("在页面中查找") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { hostRef.value?.controller?.findNext() }),
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { hostRef.value?.controller?.findNext() }) { Text("下一个") }
+                            TextButton(onClick = {
+                                findVisible = false
+                                hostRef.value?.controller?.clearMatches()
+                            }) { Text("关闭") }
                         }
+                    }
+                    if (!wide || showingPage) {
+                        val motion = MaterialTheme.motionScheme
                         AnimatedVisibility(
                             visible = menuExpanded,
-                            enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec(), expandFrom = Alignment.Top) +
-                                fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
-                            exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec(), shrinkTowards = Alignment.Top) +
-                                fadeOut(MaterialTheme.motionScheme.defaultEffectsSpec()),
+                            enter = expandVertically(motion.defaultSpatialSpec(), expandFrom = Alignment.Bottom) +
+                                fadeIn(motion.defaultEffectsSpec()),
+                            exit = shrinkVertically(motion.defaultSpatialSpec(), shrinkTowards = Alignment.Bottom) +
+                                fadeOut(motion.defaultEffectsSpec()),
                         ) {
                             MoreMenuPanel(
                                 bookmarked = vm.isBookmarked(vm.activeTab.url),
@@ -596,54 +599,29 @@ private fun DiscoverShell(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                    }
-                    // Right-side vertical toolbar: the page actions that used
-                    // to live in the bottom function bar.
-                    SideToolbar(
-                        bookmarked = vm.isBookmarked(vm.activeTab.url),
-                        loading = vm.activeTab.progress in 1..99,
-                        canGoBack = vm.activeTab.canGoBack,
-                        canGoForward = vm.activeTab.canGoForward,
-                        onBack = { hostRef.value?.controller?.back() },
-                        onForward = { hostRef.value?.controller?.forward() },
-                        onHome = { vm.navigate(UrlNormalizer.NEW_TAB_URL) },
-                        onFind = { menuExpanded = false; findVisible = true },
-                        onTabs = { select(Dest.Tabs) },
-                        onBookmark = { vm.toggleBookmark() },
-                        onHistory = { librarySection = 1; select(Dest.Library) },
-                        onReloadOrStop = { hostRef.value?.controller?.reloadOrStop(vm.activeTab.progress in 1..99) },
-                        onShare = { sharePage() },
-                        onSettings = {
-                            pendingSettingsPageName = SettingsPage.Main.name
-                            select(Dest.Settings)
-                        },
-                        glass = glass,
-                        solidStroke = solidChrome(backdropBlur),
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
-                    )
-                }
-                Column(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
-                        .padding(bottom = insetBottom + 8.dp, start = 12.dp, end = 12.dp)
-                        .widthIn(max = 840.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (!wide || showingPage) {
-                        // Bottom bar only: the find row and the page menu
-                        // moved up to the top omnibox pill.
                         DiscoverOmnibox(
                             tab = vm.activeTab,
                             showingPage = showingPage,
                             reduceMotion = reduceMotion,
+                            tabCount = vm.tabs.size,
                             glass = glass,
                             solidStroke = solidChrome(backdropBlur),
                             entries = navEntries,
                             current = dest,
                             onSelectDest = { select(it) },
-                            onExpand = { menuExpanded = false; startOmniboxEditing() },
+                            onSubmit = { vm.submitOmnibox(it) },
+                            onBack = { hostRef.value?.controller?.back() },
+                            onForward = { hostRef.value?.controller?.forward() },
+                            onReloadOrStop = { hostRef.value?.controller?.reloadOrStop(vm.activeTab.progress in 1..99) },
+                            onTabs = { select(Dest.Tabs) },
+                            onBookmark = { vm.toggleBookmark() },
+                            onShare = { menuExpanded = false; sharePage() },
+                            onFind = { menuExpanded = false; findVisible = true },
+                            onHome = { vm.navigate(UrlNormalizer.NEW_TAB_URL) },
+                            onMenuClick = { menuExpanded = !menuExpanded },
+                            bookmarked = vm.isBookmarked(vm.activeTab.url),
+                            barItems = vm.functionBarItems,
+                            onMoveBarItem = { from, to -> vm.moveFunctionBarComponent(from, to) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

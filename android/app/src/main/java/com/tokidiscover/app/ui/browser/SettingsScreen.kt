@@ -35,12 +35,15 @@ import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MotionPhotosOff
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tab
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -48,6 +51,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -71,9 +75,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tokidiscover.app.BuildConfig
+import com.tokidiscover.app.data.FunctionBarComponent
+import com.tokidiscover.app.data.MAX_FUNCTION_BAR_ITEMS
 import com.tokidiscover.app.data.SearchEngine
 import com.tokidiscover.app.data.UpdateChecker
+import com.tokidiscover.app.data.label
 import com.tokidiscover.app.ui.BrowserViewModel
+import com.tokidiscover.app.ui.components.functionBarComponentIcon
 import com.tokidiscover.app.ui.theme.ThemeMode
 import com.tokidiscover.app.ui.theme.TokiSpacing
 import com.tokidiscover.app.ui.theme.colorFromHex
@@ -81,7 +89,19 @@ import com.tokiui.semantic.SemanticTokens
 import kotlinx.coroutines.launch
 
 /** 设置内的页面：主页（入口列表）+ 二级页。页面状态由 App 骨架持有，负责返回键。 */
-enum class SettingsPage { Main, Appearance, SearchEngine, Browsing, ClearData, Update, About }
+enum class SettingsPage { Main, Appearance, SearchEngine, Browsing, ClearData, Update, About, FunctionBar }
+
+/** Title shown in the frosted header (and in the title switcher dropdown). */
+fun SettingsPage.label(): String = when (this) {
+    SettingsPage.Main -> "设置"
+    SettingsPage.Appearance -> "外观"
+    SettingsPage.SearchEngine -> "搜索引擎"
+    SettingsPage.Browsing -> "浏览"
+    SettingsPage.ClearData -> "清除浏览数据"
+    SettingsPage.Update -> "更新"
+    SettingsPage.About -> "关于"
+    SettingsPage.FunctionBar -> "功能栏"
+}
 
 private fun SemanticTokens.spaceDp(key: String, fallback: Int): Dp = (space[key] ?: fallback).dp
 private fun SemanticTokens.shapeDp(key: String, fallback: Int): Dp = (shape[key] ?: fallback).dp
@@ -192,6 +212,16 @@ fun SettingsScreen(
             gap = gap,
             cardShape = cardShape,
         )
+        SettingsPage.FunctionBar -> FunctionBarPage(
+            vm = vm,
+            topPadding = topPadding,
+            bottomPadding = bottomPadding,
+            nestedScroll = nestedScroll,
+            margin = margin,
+            gap = gap,
+            cardShape = cardShape,
+            tokens = tokens,
+        )
     }
 }
 
@@ -296,6 +326,9 @@ private fun SettingsMainPage(
                     }
                     NavRow(tokens, Icons.Filled.Public, "浏览", "桌面版 UA · JavaScript") {
                         onPage(SettingsPage.Browsing)
+                    }
+                    NavRow(tokens, Icons.Filled.Tune, "功能栏", "自定义底部功能栏的按钮与顺序") {
+                        onPage(SettingsPage.FunctionBar)
                     }
                 }
             }
@@ -509,7 +542,6 @@ private fun BrowsingPage(
     var desktopUa by remember { mutableStateOf(vm.settings.desktopUa) }
     var javascript by remember { mutableStateOf(vm.settings.javaScriptEnabled) }
     var showSpeedDial by remember { mutableStateOf(vm.settings.showSpeedDial) }
-    var showRecent by remember { mutableStateOf(vm.settings.showRecentOnNewTab) }
     LazyColumn(
         Modifier.fillMaxSize().nestedScroll(nestedScroll),
         contentPadding = PaddingValues(start = margin, end = margin, top = topPadding + gap, bottom = bottomPadding),
@@ -552,15 +584,88 @@ private fun BrowsingPage(
                             Switch(checked = showSpeedDial, onCheckedChange = { showSpeedDial = it; vm.settings.showSpeedDial = it })
                         },
                     )
-                    SettingRow(
-                        tokens,
-                        Icons.Filled.History,
-                        "显示最近访问",
-                        note = if (showRecent) "新标签页显示最近访问过的页面" else "新标签页隐藏最近访问",
-                        trailing = {
-                            Switch(checked = showRecent, onCheckedChange = { showRecent = it; vm.settings.showRecentOnNewTab = it })
-                        },
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FunctionBarPage(
+    vm: BrowserViewModel,
+    topPadding: Dp,
+    bottomPadding: Dp,
+    nestedScroll: NestedScrollConnection,
+    margin: Dp,
+    gap: Dp,
+    cardShape: Shape,
+    tokens: SemanticTokens,
+) {
+    val items = vm.functionBarItems
+    LazyColumn(
+        Modifier.fillMaxSize().nestedScroll(nestedScroll),
+        contentPadding = PaddingValues(start = margin, end = margin, top = topPadding + gap, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        item {
+            SettingsGroup(cardShape) {
+                Column {
+                    GroupHeader(tokens, Icons.Filled.Tune, "功能栏")
+                    Text(
+                        "最多放 $MAX_FUNCTION_BAR_ITEMS 个组件（含搜索框）。设置按钮无法删除，但可以调整位置。也可以直接在功能栏里长按按钮拖动排序。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(
+                            start = TokiSpacing.cardPadding,
+                            end = TokiSpacing.cardPadding,
+                            bottom = TokiSpacing.cardPadding,
+                        ),
                     )
+                    FunctionBarComponent.entries.forEach { component ->
+                        val shown = component in items
+                        val index = items.indexOf(component)
+                        val full = items.size >= MAX_FUNCTION_BAR_ITEMS
+                        SettingRow(
+                            tokens,
+                            functionBarComponentIcon(component),
+                            component.label(),
+                            note = when {
+                                component == FunctionBarComponent.Settings -> "始终显示在功能栏"
+                                shown -> "已显示在功能栏"
+                                full -> "功能栏已满（$MAX_FUNCTION_BAR_ITEMS 个），先关掉一个再开"
+                                else -> "未显示在功能栏"
+                            },
+                            trailing = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { vm.moveFunctionBarComponent(index, index - 1) },
+                                        enabled = shown && index > 0,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowUp,
+                                            contentDescription = "上移",
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { vm.moveFunctionBarComponent(index, index + 1) },
+                                        enabled = shown && index in 0..<items.lastIndex,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = "下移",
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                    Switch(
+                                        checked = shown,
+                                        enabled = component != FunctionBarComponent.Settings && (shown || !full),
+                                        onCheckedChange = { vm.setFunctionBarComponentVisible(component, it) },
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

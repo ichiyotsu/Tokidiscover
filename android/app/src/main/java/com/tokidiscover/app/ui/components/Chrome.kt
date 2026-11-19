@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,26 +16,24 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -43,7 +42,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
@@ -52,10 +53,14 @@ import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FindInPage
@@ -80,9 +85,12 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,11 +99,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -103,22 +113,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.tokidiscover.app.data.BrowserTab
+import com.tokidiscover.app.data.FunctionBarComponent
 import com.tokidiscover.app.data.UrlNormalizer
+import com.tokidiscover.app.data.label
 import com.tokidiscover.app.ui.BottomBarState
-import com.tokidiscover.app.ui.CapsuleDock
 import com.tokidiscover.app.ui.Dest
 import com.tokidiscover.app.ui.bottomBarState
-import com.tokidiscover.app.ui.capsuleOffsetFor
-import com.tokidiscover.app.ui.mainDomain
-import com.tokidiscover.app.ui.nearestCapsuleDock
+import com.tokidiscover.app.ui.browser.SettingsPage
+import com.tokidiscover.app.ui.browser.label
 import com.tokidiscover.app.ui.theme.TokiChromeStroke
 import com.tokidiscover.app.ui.theme.TokiScrollChipBackdrop
 import com.tokidiscover.app.ui.theme.TokiSpacing
 import dev.chrisbanes.haze.HazeState
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 data class NavEntry(val dest: Dest, val icon: ImageVector, val selectedIcon: ImageVector, val label: String)
@@ -152,9 +161,92 @@ fun LongPressLabel(label: String, modifier: Modifier = Modifier, content: @Compo
 }
 
 /**
+ * Jelly deformation for a long-press drag: the pill stretches along the
+ * drag direction and squashes across it, with a slight rotation — like
+ * jelly. Pure math, so it is unit-testable (see JellyDragTest).
+ */
+data class JellyDeformation(val scaleX: Float, val scaleY: Float, val rotationDegrees: Float)
+
+fun jellyDeformation(offsetX: Float, offsetY: Float): JellyDeformation {
+    // Stretch follows the drag magnitude on each axis (either direction
+    // stretches); only the tilt keeps the drag direction.
+    val stretchX = kotlin.math.abs(offsetX / 240f).coerceIn(0f, 1f)
+    val stretchY = kotlin.math.abs(offsetY / 240f).coerceIn(0f, 1f)
+    return JellyDeformation(
+        scaleX = 1f + 0.08f * stretchX - 0.03f * stretchY,
+        scaleY = 1f + 0.08f * stretchY - 0.03f * stretchX,
+        rotationDegrees = 4f * (offsetX / 240f).coerceIn(-1f, 1f),
+    )
+}
+
+/**
+ * Long-press to drag with a jelly feel. The element follows the finger,
+ * stretches along the drag direction, and springs back to its place on
+ * release with an overshoot (spring stiffness ~300, dampingRatio ~0.6).
+ * Taps still work: only a long-press starts the drag. [reduceMotion]
+ * skips the spring and snaps back instead.
+ */
+@Composable
+private fun Modifier.jellyDraggable(reduceMotion: Boolean): Modifier {
+    val offsetX = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    return this
+        .graphicsLayer {
+            translationX = offsetX.value
+            translationY = offsetY.value
+            val deformation = jellyDeformation(offsetX.value, offsetY.value)
+            scaleX = deformation.scaleX
+            scaleY = deformation.scaleY
+            rotationZ = deformation.rotationDegrees
+        }
+        .pointerInput(reduceMotion) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                },
+                onDrag = { _, dragAmount ->
+                    scope.launch {
+                        offsetX.snapTo(offsetX.value + dragAmount.x)
+                        offsetY.snapTo(offsetY.value + dragAmount.y)
+                    }
+                },
+                onDragEnd = {
+                    scope.launch {
+                        if (reduceMotion) {
+                            offsetX.snapTo(0f)
+                            offsetY.snapTo(0f)
+                        } else {
+                            offsetX.animateTo(0f, spring(stiffness = 300f, dampingRatio = 0.6f))
+                            offsetY.animateTo(0f, spring(stiffness = 300f, dampingRatio = 0.6f))
+                        }
+                    }
+                },
+                onDragCancel = {
+                    scope.launch {
+                        if (reduceMotion) {
+                            offsetX.snapTo(0f)
+                            offsetY.snapTo(0f)
+                        } else {
+                            offsetX.animateTo(0f, spring(stiffness = 300f, dampingRatio = 0.6f))
+                            offsetY.animateTo(0f, spring(stiffness = 300f, dampingRatio = 0.6f))
+                        }
+                    }
+                },
+            )
+        }
+}
+
+/**
  * The one title header for the whole app (TokiStudio 0.1.10): a single text
  * role (headlineMedium, Bold), a 56dp round back chip, a fixed 12dp gap.
  * The frost is always on — it never fades in or out with scroll.
+ * Long-press the frosted title pill to drag it with a jelly wobble; it
+ * always springs back to its place, so the drag never moves anything
+ * permanently and never breaks the back chip or a title tap. When
+ * [onTitleClick] is set, tapping the pill runs it and a dropdown arrow
+ * is shown (the Settings page uses this for its page switcher).
  */
 @Composable
 fun OverlayTitleHeader(
@@ -164,6 +256,8 @@ fun OverlayTitleHeader(
     backdropBlur: Boolean,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
+    onTitleClick: (() -> Unit)? = null,
+    reduceMotion: Boolean = false,
 ) {
     val density = LocalDensity.current
     val content = MaterialTheme.colorScheme.onSurface
@@ -189,7 +283,9 @@ fun OverlayTitleHeader(
             Modifier
                 .weight(1f, fill = false)
                 .heightIn(min = 56.dp)
-                .clip(titleShape),
+                .clip(titleShape)
+                .then(if (onTitleClick != null) Modifier.clickable { onTitleClick() } else Modifier)
+                .jellyDraggable(reduceMotion),
             contentAlignment = Alignment.CenterStart,
         ) {
             TokiScrollChipBackdrop(
@@ -198,15 +294,27 @@ fun OverlayTitleHeader(
                 hazeState = hazeState,
                 modifier = Modifier.matchParentSize(),
             )
-            Text(
-                title,
-                modifier = Modifier.padding(horizontal = TokiSpacing.titleGlyphInset),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = content,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                Modifier.padding(horizontal = TokiSpacing.titleGlyphInset),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (onTitleClick != null) {
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = "切换设置页",
+                        tint = content,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -372,6 +480,115 @@ fun DiscoverFloatingNavBar(
 }
 
 /**
+ * The shared dropdown panel (TokiUI 0.1.11 glass, 28dp corners): the ⋮
+ * menu and the Settings title switcher are the same component, so their
+ * look and feel stay identical.
+ */
+@Composable
+fun TokiMenuPanel(
+    glass: Modifier,
+    solidStroke: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(28.dp)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .then(glass)
+            .then(
+                if (solidStroke) {
+                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(vertical = 8.dp),
+        content = content,
+    )
+}
+
+@Composable
+private fun MenuActionRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    selected: Boolean = false,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (selected) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = "当前页",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** Icon for a settings page, for the title switcher dropdown. */
+private fun settingsPageIcon(page: SettingsPage): ImageVector = when (page) {
+    SettingsPage.Main -> Icons.Filled.Settings
+    SettingsPage.Appearance -> Icons.Filled.Palette
+    SettingsPage.SearchEngine -> Icons.Filled.Search
+    SettingsPage.Browsing -> Icons.Filled.Public
+    SettingsPage.ClearData -> Icons.Filled.DeleteSweep
+    SettingsPage.Update -> Icons.Filled.SystemUpdate
+    SettingsPage.About -> Icons.Outlined.Info
+    SettingsPage.FunctionBar -> Icons.Filled.Tune
+}
+
+/**
+ * The Settings title switcher: same panel as the ⋮ menu, listing every
+ * settings page so the user can jump between them without going back.
+ */
+@Composable
+fun SettingsPageDropdown(
+    current: SettingsPage,
+    onSelect: (SettingsPage) -> Unit,
+    glass: Modifier,
+    solidStroke: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    TokiMenuPanel(glass, solidStroke, modifier) {
+        SettingsPage.entries.forEach { page ->
+            MenuActionRow(
+                label = page.label(),
+                icon = settingsPageIcon(page),
+                onClick = { onSelect(page) },
+                selected = page == current,
+            )
+        }
+    }
+}
+
+/** Static icon for a function bar component (the bar itself overrides bookmark/refresh by state). */
+fun functionBarComponentIcon(component: FunctionBarComponent): ImageVector = when (component) {
+    FunctionBarComponent.Search -> Icons.Filled.Search
+    FunctionBarComponent.Back -> Icons.AutoMirrored.Filled.ArrowBack
+    FunctionBarComponent.Forward -> Icons.AutoMirrored.Filled.ArrowForward
+    FunctionBarComponent.Refresh -> Icons.Filled.Refresh
+    FunctionBarComponent.Tabs -> Icons.Outlined.Tab
+    FunctionBarComponent.Bookmark -> Icons.Outlined.BookmarkBorder
+    FunctionBarComponent.Share -> Icons.Outlined.Share
+    FunctionBarComponent.Find -> Icons.Outlined.FindInPage
+    FunctionBarComponent.Home -> Icons.Filled.Home
+    FunctionBarComponent.Settings -> Icons.Filled.Settings
+}
+
+/**
  * The "更多" menu, structured like Chrome's overflow menu (Simplified
  * Chinese, TokiUI 0.1.10 glass): new tab / private tab / add to group,
  * history / clear data / downloads / bookmarks / recently closed / tabs,
@@ -405,21 +622,7 @@ fun MoreMenuPanel(
     solidStroke: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(28.dp)
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .then(glass)
-            .then(
-                if (solidStroke) {
-                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, shape)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(vertical = 8.dp),
-    ) {
+    TokiMenuPanel(glass, solidStroke, modifier) {
         MenuActionRow("新标签页", Icons.Filled.Add, onNewTab)
         MenuActionRow("新无痕标签页", Icons.Filled.VisibilityOff, onNewPrivateTab)
         MenuActionRow("将标签页加入新群组", Icons.Filled.GroupAdd, onAddToGroup)
@@ -446,32 +649,16 @@ fun MoreMenuPanel(
     }
 }
 
-@Composable
-private fun MenuActionRow(label: String, icon: ImageVector, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
 /**
- * The bottom bar in its two shapes (TokiUI 0.1.11 redesign):
+ * The bottom bar in its two shapes (TokiUI 0.1.11):
  * - [BottomBarState.Nav]: the regular floating glass capsule nav, on the
  *   home page and the app destinations.
- * - [BottomBarState.Capsule]: on a website — a draggable capsule showing
- *   only the main domain. Tapping it opens the top omnibox pill for
- *   editing. The address field and the page actions no longer live here:
- *   the address field is the top omnibox pill, the actions are the
- *   right-side toolbar.
- * The regular bar slides down out of the way when a website opens.
+ * - [BottomBarState.FunctionBar]: on a website — outer glass capsule,
+ *   inner pill with the full URL, and the configured page actions around
+ *   it. The bar never collapses and never hides: it stays put.
+ * The function bar is configurable (see FunctionBarConfig): each button
+ * is one component, at most seven including the search pill; long-press
+ * a button and drag it sideways to reorder.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -479,26 +666,32 @@ fun DiscoverOmnibox(
     tab: BrowserTab,
     showingPage: Boolean,
     reduceMotion: Boolean,
+    tabCount: Int,
     glass: Modifier,
     solidStroke: Boolean,
     entries: List<NavEntry>,
     current: Dest,
     onSelectDest: (Dest) -> Unit,
-    onExpand: () -> Unit,
+    onSubmit: (String) -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onReloadOrStop: () -> Unit,
+    onTabs: () -> Unit,
+    onBookmark: () -> Unit,
+    onShare: () -> Unit,
+    onFind: () -> Unit,
+    onHome: () -> Unit,
+    onMenuClick: () -> Unit,
+    bookmarked: Boolean,
+    barItems: List<FunctionBarComponent>,
+    onMoveBarItem: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var editing by remember(tab.id) { mutableStateOf(false) }
+    var draft by remember(tab.id) { mutableStateOf("") }
     val loading = tab.progress in 1..99
-    val domain = mainDomain(tab.url)
-    val motion = MaterialTheme.motionScheme
-
-    // Capsule dock state lives above AnimatedContent so a drag offset survives
-    // the state transitions. The dock persists across recreation.
-    var dockName by rememberSaveable { mutableStateOf(CapsuleDock.Center.name) }
-    val dock = runCatching { CapsuleDock.valueOf(dockName) }.getOrDefault(CapsuleDock.Center)
-    val capsuleOffset = remember { Animatable(0f) }
-    val dragScope = rememberCoroutineScope()
-
     val state = bottomBarState(showingPage)
+    val motion = MaterialTheme.motionScheme
 
     Column(modifier.fillMaxWidth()) {
         if (loading && showingPage) {
@@ -534,121 +727,179 @@ fun DiscoverOmnibox(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                BottomBarState.Capsule -> {
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val containerWidth = maxWidth
-                        // Small capsule: 60% of the bar width, clamped so it stays
-                        // tappable on narrow phones and small on wide screens.
-                        val capsuleWidth = (containerWidth * 0.6f).coerceIn(180.dp, 280.dp)
-                        val density = LocalDensity.current
-                        val containerPx = with(density) { containerWidth.toPx() }
-                        val capsulePx = with(density) { capsuleWidth.toPx() }
-                        val maxOffset = (containerPx - capsulePx).coerceAtLeast(0f)
-                        LaunchedEffect(containerPx, capsulePx) {
-                            capsuleOffset.snapTo(capsuleOffsetFor(dock, containerPx, capsulePx))
-                        }
-                        Box(Modifier.fillMaxWidth()) {
-                            Row(
-                                Modifier
-                                    .width(capsuleWidth)
-                                    .offset { IntOffset(capsuleOffset.value.roundToInt(), 0) }
-                                    .height(56.dp)
-                                    .clip(CircleShape)
-                                    .then(glass)
-                                    .then(
-                                        if (solidStroke) {
-                                            Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, CircleShape)
-                                        } else {
-                                            Modifier
-                                        },
-                                    )
-                                    .clickable { onExpand() }
-                                    .draggable(
-                                        state = rememberDraggableState { delta ->
-                                            dragScope.launch {
-                                                capsuleOffset.snapTo(
-                                                    (capsuleOffset.value + delta).coerceIn(0f, maxOffset),
-                                                )
-                                            }
-                                        },
-                                        orientation = Orientation.Horizontal,
-                                        onDragStopped = { velocity ->
-                                            val target = nearestCapsuleDock(
-                                                capsuleOffset.value,
-                                                containerPx,
-                                                capsulePx,
-                                                velocity,
-                                            )
-                                            dockName = target.name
-                                            val targetOffset = capsuleOffsetFor(target, containerPx, capsulePx)
-                                            dragScope.launch {
-                                                if (reduceMotion) {
-                                                    capsuleOffset.snapTo(targetOffset)
-                                                } else {
-                                                    capsuleOffset.animateTo(
-                                                        targetOffset,
-                                                        motion.defaultSpatialSpec(),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    ),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = (if (tab.isPrivate) "无痕 · " else "") +
-                                        domain.ifBlank { tab.title.ifBlank { "新标签页" } },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 16.dp),
-                                )
-                            }
-                        }
-                    }
+                BottomBarState.FunctionBar -> {
+                    FunctionBar(
+                        tab = tab,
+                        editing = editing,
+                        draft = draft,
+                        onDraftChange = { draft = it },
+                        onEditRequest = {
+                            editing = true
+                            draft = if (tab.url == UrlNormalizer.NEW_TAB_URL) "" else tab.url
+                        },
+                        onSubmit = {
+                            onSubmit(it)
+                            editing = false
+                        },
+                        loading = loading,
+                        bookmarked = bookmarked,
+                        tabCount = tabCount,
+                        barItems = barItems,
+                        onMoveBarItem = onMoveBarItem,
+                        onBack = onBack,
+                        onForward = onForward,
+                        onReloadOrStop = onReloadOrStop,
+                        onTabs = onTabs,
+                        onBookmark = onBookmark,
+                        onShare = onShare,
+                        onFind = onFind,
+                        onHome = onHome,
+                        onMenuClick = onMenuClick,
+                        glass = glass,
+                        solidStroke = solidStroke,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         }
     }
 }
 
-
-/** Text shown in the top omnibox pill: the full URL, or the placeholder on a new tab. */
-fun topOmniboxText(tab: BrowserTab): String =
-    (if (tab.isPrivate) "无痕 · " else "") +
-        if (tab.url == UrlNormalizer.NEW_TAB_URL) "搜索或输入网址" else tab.url
-
 /**
- * The top floating omnibox pill on a website (TokiUI 0.1.11): one glass
- * capsule with the page URL — tapping it swaps in the address field —
- * and the ⋮ button that opens the page menu below it. The bottom bar no
- * longer carries the address field.
+ * The configurable function bar: one 72dp glass capsule holding the
+ * configured components in order. The search pill takes the remaining
+ * width (min 48dp so it stays tappable); every other component is a
+ * 48dp button. Long-press a component and drag it sideways to reorder —
+ * the order is saved as you drag. Dragging is disabled while the
+ * address field is being edited.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun TopOmniboxPill(
+private fun FunctionBar(
     tab: BrowserTab,
     editing: Boolean,
     draft: String,
     onDraftChange: (String) -> Unit,
     onEditRequest: () -> Unit,
     onSubmit: (String) -> Unit,
-    onEditingChange: (Boolean) -> Unit,
+    loading: Boolean,
+    bookmarked: Boolean,
+    tabCount: Int,
+    barItems: List<FunctionBarComponent>,
+    onMoveBarItem: (Int, Int) -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onReloadOrStop: () -> Unit,
+    onTabs: () -> Unit,
+    onBookmark: () -> Unit,
+    onShare: () -> Unit,
+    onFind: () -> Unit,
+    onHome: () -> Unit,
     onMenuClick: () -> Unit,
     glass: Modifier,
     solidStroke: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+    val dragScope = rememberCoroutineScope()
+    // The component being dragged, tracked by identity (not index) so the
+    // drag survives the list reordering under it.
+    var draggingComponent by remember { mutableStateOf<FunctionBarComponent?>(null) }
+    var dragAccumPx by remember { mutableFloatStateOf(0f) }
+    val dragOffset = remember { Animatable(0f) }
+    val currentItems by rememberUpdatedState(barItems)
+    val currentOnMove by rememberUpdatedState(onMoveBarItem)
+    // One reorder step is one button wide; the wide search pill just needs
+    // a longer drag to cross it.
+    val stepPx = with(density) { 56.dp.toPx() }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(editing) {
         if (editing) focusRequester.requestFocus()
     }
+
+    /** Long-press drag for one bar item: sideways reorder, spring back on release. */
+    fun Modifier.barDrag(component: FunctionBarComponent): Modifier = pointerInput(component) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = {
+                draggingComponent = component
+                dragAccumPx = 0f
+                dragScope.launch { dragOffset.snapTo(0f) }
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            },
+            onDrag = { _, dragAmount ->
+                val items = currentItems
+                val from = items.indexOf(component)
+                if (from < 0) return@detectDragGesturesAfterLongPress
+                dragAccumPx += dragAmount.x
+                dragScope.launch { dragOffset.snapTo(dragAccumPx) }
+                val steps = (dragAccumPx / stepPx).toInt()
+                if (steps != 0) {
+                    val to = (from + steps).coerceIn(0, items.lastIndex)
+                    if (to != from) currentOnMove(from, to)
+                    dragAccumPx -= steps * stepPx
+                }
+            },
+            onDragEnd = {
+                dragAccumPx = 0f
+                dragScope.launch {
+                    dragOffset.animateTo(0f, spring(stiffness = 400f, dampingRatio = 0.7f))
+                    draggingComponent = null
+                }
+            },
+            onDragCancel = {
+                dragAccumPx = 0f
+                dragScope.launch {
+                    dragOffset.animateTo(0f, spring(stiffness = 400f, dampingRatio = 0.7f))
+                    draggingComponent = null
+                }
+            },
+        )
+    }
+
+    /** One draggable bar item: follows the finger while dragged, pops up a little. */
+    @Composable
+    fun BarItemWrapper(component: FunctionBarComponent, content: @Composable () -> Unit) {
+        val isDragging = draggingComponent == component
+        val scale by animateFloatAsState(
+            targetValue = if (isDragging) 1.08f else 1f,
+            animationSpec = spring(stiffness = 400f, dampingRatio = 0.7f),
+            label = "barDragScale",
+        )
+        Box(
+            Modifier
+                .zIndex(if (isDragging) 1f else 0f)
+                .graphicsLayer {
+                    translationX = if (isDragging) dragOffset.value else 0f
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .then(if (!editing) Modifier.barDrag(component) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) { content() }
+    }
+
+    @Composable
+    fun BarButton(
+        component: FunctionBarComponent,
+        label: String,
+        icon: ImageVector,
+        onClick: () -> Unit,
+        enabled: Boolean = true,
+    ) {
+        BarItemWrapper(component) {
+            LongPressLabel(label) {
+                IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                    Icon(icon, contentDescription = label)
+                }
+            }
+        }
+    }
+
     Row(
         modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(72.dp)
             .clip(CircleShape)
             .then(glass)
             .then(
@@ -658,127 +909,125 @@ fun TopOmniboxPill(
                     Modifier
                 },
             )
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = null,
-            modifier = Modifier.padding(start = 12.dp).size(24.dp),
-        )
-        if (editing) {
-            androidx.compose.material3.TextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                singleLine = true,
-                placeholder = { Text("搜索或输入网址") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = {
-                    onSubmit(draft)
-                    onEditingChange(false)
-                }),
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                modifier = Modifier.weight(1f).focusRequester(focusRequester),
-            )
-        } else {
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clickable { onEditRequest() }
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    text = topOmniboxText(tab),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        LongPressLabel("页面菜单") {
-            IconButton(onClick = onMenuClick, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "页面菜单")
+        barItems.forEach { component ->
+            key(component) {
+                when (component) {
+                    FunctionBarComponent.Search -> {
+                        val isDragging = draggingComponent == FunctionBarComponent.Search
+                        val scale by animateFloatAsState(
+                            targetValue = if (isDragging) 1.04f else 1f,
+                            animationSpec = spring(stiffness = 400f, dampingRatio = 0.7f),
+                            label = "barDragScale",
+                        )
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .widthIn(min = 48.dp)
+                                .height(56.dp)
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer {
+                                    translationX = if (isDragging) dragOffset.value else 0f
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                                .then(if (!editing) Modifier.barDrag(FunctionBarComponent.Search) else Modifier)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .then(if (!editing) Modifier.clickable { onEditRequest() } else Modifier)
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (editing) {
+                                androidx.compose.material3.TextField(
+                                    value = draft,
+                                    onValueChange = onDraftChange,
+                                    singleLine = true,
+                                    placeholder = { Text("搜索或输入网址") },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                                    keyboardActions = KeyboardActions(onGo = { onSubmit(draft) }),
+                                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                                )
+                            } else {
+                                Text(
+                                    text = (if (tab.isPrivate) "无痕 · " else "") +
+                                        if (tab.url == UrlNormalizer.NEW_TAB_URL) "搜索或输入网址" else tab.url,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    FunctionBarComponent.Back -> BarButton(
+                        component, "后退", Icons.AutoMirrored.Filled.ArrowBack, onBack,
+                        enabled = tab.canGoBack,
+                    )
+                    FunctionBarComponent.Forward -> BarButton(
+                        component, "前进", Icons.AutoMirrored.Filled.ArrowForward, onForward,
+                        enabled = tab.canGoForward,
+                    )
+                    FunctionBarComponent.Refresh -> BarButton(
+                        component,
+                        if (loading) "停止" else "刷新",
+                        if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
+                        onReloadOrStop,
+                    )
+                    FunctionBarComponent.Tabs -> BarItemWrapper(component) {
+                        TabCountButton(tabCount, onTabs)
+                    }
+                    FunctionBarComponent.Bookmark -> BarButton(
+                        component,
+                        if (bookmarked) "已收藏" else "收藏",
+                        if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        onBookmark,
+                    )
+                    FunctionBarComponent.Share -> BarButton(
+                        component, "分享", Icons.Outlined.Share, onShare,
+                    )
+                    FunctionBarComponent.Find -> BarButton(
+                        component, "页内查找", Icons.Outlined.FindInPage, onFind,
+                    )
+                    FunctionBarComponent.Home -> BarButton(
+                        component, "主页", Icons.Filled.Home, onHome,
+                    )
+                    FunctionBarComponent.Settings -> BarButton(
+                        component, "页面菜单", Icons.Filled.MoreVert, onMenuClick,
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * The vertical floating toolbar on the right edge of a website (TokiUI
- * 0.1.11): one glass capsule with the page actions that used to live in
- * the bottom function bar — back, forward, home, find in page, tabs,
- * bookmark, history, refresh, share, settings. Every icon is wired to a
- * ⋮ menu stays in the top omnibox pill. No avatar/profile entry: that
- * was the reference browser's own account button, not a feature here.
- */
 @Composable
-fun SideToolbar(
-    bookmarked: Boolean,
-    loading: Boolean,
-    canGoBack: Boolean,
-    canGoForward: Boolean,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onHome: () -> Unit,
-    onFind: () -> Unit,
-    onTabs: () -> Unit,
-    onBookmark: () -> Unit,
-    onHistory: () -> Unit,
-    onReloadOrStop: () -> Unit,
-    onShare: () -> Unit,
-    onSettings: () -> Unit,
-    glass: Modifier,
-    solidStroke: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(percent = 50)
-    Column(
-        modifier
-            .clip(shape)
-            .then(glass)
-            .then(
-                if (solidStroke) {
-                    Modifier.border(TokiChromeStroke.width, MaterialTheme.colorScheme.primary, shape)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        SideToolButton("后退", Icons.AutoMirrored.Filled.ArrowBack, onBack, enabled = canGoBack)
-        SideToolButton("前进", Icons.AutoMirrored.Filled.ArrowForward, onForward, enabled = canGoForward)
-        SideToolButton("主页", Icons.Filled.Home, onHome)
-        SideToolButton("页内查找", Icons.Outlined.FindInPage, onFind)
-        SideToolButton("标签页", Icons.Outlined.Tab, onTabs)
-        SideToolButton(
-            if (bookmarked) "已收藏" else "收藏",
-            if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-            onBookmark,
-        )
-        SideToolButton("历史记录", Icons.Filled.History, onHistory)
-        SideToolButton(
-            if (loading) "停止" else "刷新",
-            if (loading) Icons.Filled.Close else Icons.Filled.Refresh,
-            onReloadOrStop,
-        )
-        SideToolButton("分享", Icons.Outlined.Share, onShare)
-        SideToolButton("设置", Icons.Filled.Settings, onSettings)
-    }
-}
-
-@Composable
-private fun SideToolButton(label: String, icon: ImageVector, onClick: () -> Unit, enabled: Boolean = true) {
+private fun TabCountButton(tabCount: Int, onTabs: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val label = "标签页，共 $tabCount 个"
     LongPressLabel(label) {
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
-            Icon(icon, contentDescription = label)
+        Row(
+            Modifier
+                .height(48.dp)
+                .clip(CircleShape)
+                .clickable(interactionSource = interaction, indication = ripple()) { onTabs() }
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.Tab,
+                contentDescription = label,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("$tabCount", style = MaterialTheme.typography.labelLarge)
         }
     }
 }

@@ -25,4 +25,8 @@ class BrowserStore(context: Context) {
     var tabGroupsJson: String
         get() = prefs.getString("tab_groups", "") ?: ""
         set(v) { prefs.edit().putString("tab_groups", v).apply() }
+    /** Custom Speed Dial sites as one JSON string (see encodeSpeedDial); empty = defaults. */
+    var speedDialJson: String
+        get() = prefs.getString("speed_dial", "") ?: ""
+        set(v) { prefs.edit().putString("speed_dial", v).apply() }
 }

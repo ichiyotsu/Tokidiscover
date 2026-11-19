@@ -24,8 +24,8 @@ class SettingsStore(context: Context) {
     /** New-tab page: show the Speed Dial shortcuts row. */
     var showSpeedDial: Boolean get() = prefs.getBoolean("ntp_speed_dial", true)
         set(v) { prefs.edit().putBoolean("ntp_speed_dial", v).apply() }
-    /** New-tab page: show the recently visited list. */
-    var showRecentOnNewTab: Boolean get() = prefs.getBoolean("ntp_recent", true)
-        set(v) { prefs.edit().putBoolean("ntp_recent", v).apply() }
+    /** Bottom function bar layout as JSON (see FunctionBarConfig); blank = default. */
+    var functionBarJson: String get() = prefs.getString("function_bar", "") ?: ""
+        set(v) { prefs.edit().putString("function_bar", v).apply() }
     fun engine(): SearchEngine = runCatching { SearchEngine.valueOf(searchEngine) }.getOrDefault(SearchEngine.Default)
 }
