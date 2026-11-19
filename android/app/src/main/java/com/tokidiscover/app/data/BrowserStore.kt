@@ -21,4 +21,8 @@ class BrowserStore(context: Context) {
         history = (listOf(HistoryEntry(title = title.ifBlank { url }, url = url)) + history).take(500)
     }
     fun clearHistory() { history = emptyList() }
+    /** Tab groups as one JSON string (see encodeTabGroups); empty when there are no groups. */
+    var tabGroupsJson: String
+        get() = prefs.getString("tab_groups", "") ?: ""
+        set(v) { prefs.edit().putString("tab_groups", v).apply() }
 }

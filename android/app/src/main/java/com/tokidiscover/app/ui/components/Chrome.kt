@@ -41,12 +41,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FindInPage
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Translate
@@ -356,18 +366,36 @@ fun DiscoverFloatingNavBar(
     }
 }
 
-/** The "更多" secondary menu: navigation entries plus page actions, on one glass panel. */
+/**
+ * The "更多" menu, structured like Chrome's overflow menu (Simplified
+ * Chinese, TokiUI 0.1.10 glass): new tab / private tab / add to group,
+ * history / clear data / downloads / bookmarks / recently closed / tabs,
+ * settings / customize new tab / about — plus the page actions
+ * (bookmark / find / share / translate) in a final section. The app's
+ * destination nav lives in the bottom Nav bar on the home page; on a
+ * website this menu is the only way to reach 标签页 / 书库 / 设置, so
+ * those entries are included here.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MoreMenuPanel(
-    entries: List<NavEntry>,
-    current: Dest,
-    onSelect: (Dest) -> Unit,
     bookmarked: Boolean,
     onBookmark: () -> Unit,
     onShare: () -> Unit,
     onFind: () -> Unit,
     onTranslate: () -> Unit,
+    onNewTab: () -> Unit,
+    onNewPrivateTab: () -> Unit,
+    onAddToGroup: () -> Unit,
+    onHistory: () -> Unit,
+    onClearData: () -> Unit,
+    onDownloads: () -> Unit,
+    onBookmarks: () -> Unit,
+    onRecentTabs: () -> Unit,
+    onTabs: () -> Unit,
+    onSettings: () -> Unit,
+    onCustomizeNewTab: () -> Unit,
+    onAbout: () -> Unit,
     glass: Modifier,
     solidStroke: Boolean,
     modifier: Modifier = Modifier,
@@ -387,7 +415,20 @@ fun MoreMenuPanel(
             )
             .padding(vertical = 8.dp),
     ) {
-        DiscoverNavBar(entries, current, onSelect, Modifier.fillMaxWidth())
+        MenuActionRow("新标签页", Icons.Filled.Add, onNewTab)
+        MenuActionRow("新无痕标签页", Icons.Filled.VisibilityOff, onNewPrivateTab)
+        MenuActionRow("将标签页加入新群组", Icons.Filled.GroupAdd, onAddToGroup)
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        MenuActionRow("历史记录", Icons.Filled.History, onHistory)
+        MenuActionRow("删除浏览数据", Icons.Filled.DeleteSweep, onClearData)
+        MenuActionRow("下载", Icons.Filled.Download, onDownloads)
+        MenuActionRow("书签", Icons.Outlined.BookmarkBorder, onBookmarks)
+        MenuActionRow("最近打开的标签页", Icons.Filled.Restore, onRecentTabs)
+        MenuActionRow("标签页", Icons.Outlined.Tab, onTabs)
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        MenuActionRow("设置", Icons.Filled.Settings, onSettings)
+        MenuActionRow("自定义新标签页", Icons.Filled.Edit, onCustomizeNewTab)
+        MenuActionRow("说明和意见反馈", Icons.Outlined.Info, onAbout)
         HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         MenuActionRow(
             if (bookmarked) "已收藏" else "收藏",

@@ -20,10 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -46,8 +42,9 @@ fun LibraryScreen(
     bottomPadding: Dp,
     nestedScroll: NestedScrollConnection,
     onOpenUrl: (String) -> Unit,
+    section: Int = 0,
+    onSection: (Int) -> Unit = {},
 ) {
-    var section by rememberSaveable { mutableIntStateOf(0) }
     val format = rememberSaveableFormat()
     Column(
         Modifier
@@ -57,7 +54,7 @@ fun LibraryScreen(
     ) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             sections.forEachIndexed { index, label ->
-                FilterChip(selected = section == index, onClick = { section = index }, label = { Text(label) })
+                FilterChip(selected = section == index, onClick = { onSection(index) }, label = { Text(label) })
             }
         }
         Text(

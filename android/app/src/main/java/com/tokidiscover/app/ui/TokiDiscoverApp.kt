@@ -211,6 +211,10 @@ private fun DiscoverShell(
     val dest = runCatching { Dest.valueOf(destName) }.getOrDefault(Dest.Browser)
     fun select(next: Dest) { destName = next.name }
     var settingsPageName by rememberSaveable { mutableStateOf(SettingsPage.Main.name) }
+    /** A settings sub-page the ⋮ menu asked for; applied once when the dest changes. */
+    var pendingSettingsPageName by remember { mutableStateOf<String?>(null) }
+    /** Which Library section the ⋮ menu asked for (0 书签 / 1 历史 / 2 下载). */
+    var librarySection by rememberSaveable { mutableIntStateOf(0) }
     val settingsPage = runCatching { SettingsPage.valueOf(settingsPageName) }.getOrDefault(SettingsPage.Main)
     var collapsed by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -284,7 +288,8 @@ private fun DiscoverShell(
         menuExpanded = false
         pendingWebPermission?.deny()
         pendingWebPermission = null
-        settingsPageName = SettingsPage.Main.name
+        settingsPageName = pendingSettingsPageName ?: SettingsPage.Main.name
+        pendingSettingsPageName = null
     }
 
     val webBack = showingPage && vm.activeTab.canGoBack
@@ -382,10 +387,18 @@ private fun DiscoverShell(
                         when (dest) {
                             Dest.Browser -> HomeScreen(vm, top, bottomPadding, nested)
                             Dest.Tabs -> TabsScreen(vm, top, bottomPadding, nested) { select(Dest.Browser) }
-                            Dest.Library -> LibraryScreen(vm, top, bottomPadding, nested) { url ->
-                                vm.navigate(url)
-                                select(Dest.Browser)
-                            }
+                            Dest.Library -> LibraryScreen(
+                                vm = vm,
+                                topPadding = top,
+                                bottomPadding = bottomPadding,
+                                nestedScroll = nested,
+                                onOpenUrl = { url ->
+                                    vm.navigate(url)
+                                    select(Dest.Browser)
+                                },
+                                section = librarySection,
+                                onSection = { librarySection = it },
+                            )
                             Dest.Settings -> SettingsScreen(
                                 vm = vm,
                                 tokens = tokens,
@@ -481,9 +494,6 @@ private fun DiscoverShell(
                                 fadeOut(motion.defaultEffectsSpec()),
                         ) {
                             MoreMenuPanel(
-                                entries = navEntries,
-                                current = dest,
-                                onSelect = { menuExpanded = false; select(it) },
                                 bookmarked = vm.isBookmarked(vm.activeTab.url),
                                 onBookmark = { menuExpanded = false; vm.toggleBookmark() },
                                 onShare = {
@@ -499,6 +509,44 @@ private fun DiscoverShell(
                                     if (UrlNormalizer.isSafeScheme(vm.activeTab.url)) {
                                         vm.navigate(PageActions.translateUrl(vm.activeTab.url))
                                     }
+                                },
+                                onNewTab = { menuExpanded = false; vm.newTab(); select(Dest.Browser) },
+                                onNewPrivateTab = { menuExpanded = false; vm.newTab(isPrivate = true); select(Dest.Browser) },
+                                onAddToGroup = {
+                                    menuExpanded = false
+                                    val tab = vm.activeTab
+                                    val existing = vm.groups.firstOrNull { tab.id in it.tabIds }
+                                    if (existing != null) {
+                                        toast("该标签页已在群组「${existing.name}」中")
+                                    } else {
+                                        val group = vm.createGroupForTab(tab.id)
+                                        if (group != null) toast("已创建群组「${group.name}」") else toast("无法创建群组")
+                                    }
+                                },
+                                onHistory = { menuExpanded = false; librarySection = 1; select(Dest.Library) },
+                                onClearData = {
+                                    menuExpanded = false
+                                    pendingSettingsPageName = SettingsPage.ClearData.name
+                                    select(Dest.Settings)
+                                },
+                                onDownloads = { menuExpanded = false; librarySection = 2; select(Dest.Library) },
+                                onBookmarks = { menuExpanded = false; librarySection = 0; select(Dest.Library) },
+                                onRecentTabs = { menuExpanded = false; select(Dest.Tabs) },
+                                onTabs = { menuExpanded = false; select(Dest.Tabs) },
+                                onSettings = {
+                                    menuExpanded = false
+                                    pendingSettingsPageName = SettingsPage.Main.name
+                                    select(Dest.Settings)
+                                },
+                                onCustomizeNewTab = {
+                                    menuExpanded = false
+                                    pendingSettingsPageName = SettingsPage.Browsing.name
+                                    select(Dest.Settings)
+                                },
+                                onAbout = {
+                                    menuExpanded = false
+                                    pendingSettingsPageName = SettingsPage.About.name
+                                    select(Dest.Settings)
                                 },
                                 glass = glass,
                                 solidStroke = solidChrome(backdropBlur),

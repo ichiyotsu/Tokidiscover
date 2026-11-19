@@ -103,6 +103,8 @@ class TabWebHost(context: Context) : FrameLayout(context) {
                 active = tab.id == vm.activeTabId && showPage,
             )
             if (applied[web] != desired) {
+                // Capture while the page is still visible: once hidden, draw() yields blank.
+                if (applied[web]?.active == true && !desired.active) captureThumbnail(tab)
                 applySettings(web, tab, vm)
                 web.setBackgroundColor(backgroundColor)
                 web.visibility = if (desired.active) VISIBLE else GONE
@@ -118,6 +120,30 @@ class TabWebHost(context: Context) : FrameLayout(context) {
 
     fun clearCaches() {
         views.values.forEach { it.clearCache(true) }
+    }
+
+    /**
+     * Capture the tab's page as a small thumbnail for the tab grid. Best
+     * effort: the WebView must still be visible (call before it is hidden),
+     * and a failed capture simply leaves the previous thumbnail in place.
+     */
+    fun captureThumbnail(tab: BrowserTab) {
+        val web = views[tab.id] ?: return
+        runCatching {
+            val w = web.width
+            val h = web.height
+            if (w <= 0 || h <= 0) return
+            val scale = 360f / w
+            val bitmap = Bitmap.createBitmap(
+                (w * scale).toInt().coerceAtLeast(1),
+                (h * scale).toInt().coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888,
+            )
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.scale(scale, scale)
+            web.draw(canvas)
+            tab.thumbnail = bitmap
+        }
     }
 
     private fun loadRestored(web: WebView, tab: BrowserTab) {
@@ -275,6 +301,10 @@ class TabWebHost(context: Context) : FrameLayout(context) {
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView, newProgress: Int) {
                     tab.progress = newProgress
+                }
+
+                override fun onReceivedIcon(view: WebView, icon: Bitmap?) {
+                    if (icon != null) tab.favicon = icon
                 }
 
                 override fun onCreateWindow(

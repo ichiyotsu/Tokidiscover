@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Cookie
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MotionPhotosOff
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -506,6 +508,8 @@ private fun BrowsingPage(
 ) {
     var desktopUa by remember { mutableStateOf(vm.settings.desktopUa) }
     var javascript by remember { mutableStateOf(vm.settings.javaScriptEnabled) }
+    var showSpeedDial by remember { mutableStateOf(vm.settings.showSpeedDial) }
+    var showRecent by remember { mutableStateOf(vm.settings.showRecentOnNewTab) }
     LazyColumn(
         Modifier.fillMaxSize().nestedScroll(nestedScroll),
         contentPadding = PaddingValues(start = margin, end = margin, top = topPadding + gap, bottom = bottomPadding),
@@ -530,6 +534,31 @@ private fun BrowsingPage(
                         note = if (javascript) "脚本已打开，刷新后生效" else "脚本已关闭，部分网站无法使用，刷新后生效",
                         trailing = {
                             Switch(checked = javascript, onCheckedChange = { javascript = it; vm.settings.javaScriptEnabled = it })
+                        },
+                    )
+                }
+            }
+        }
+        item {
+            SettingsGroup(cardShape) {
+                Column {
+                    GroupHeader(tokens, Icons.Filled.Tab, "新标签页")
+                    SettingRow(
+                        tokens,
+                        Icons.Filled.GridView,
+                        "显示常用站点",
+                        note = if (showSpeedDial) "新标签页显示快捷方式" else "新标签页隐藏快捷方式",
+                        trailing = {
+                            Switch(checked = showSpeedDial, onCheckedChange = { showSpeedDial = it; vm.settings.showSpeedDial = it })
+                        },
+                    )
+                    SettingRow(
+                        tokens,
+                        Icons.Filled.History,
+                        "显示最近访问",
+                        note = if (showRecent) "新标签页显示最近访问过的页面" else "新标签页隐藏最近访问",
+                        trailing = {
+                            Switch(checked = showRecent, onCheckedChange = { showRecent = it; vm.settings.showRecentOnNewTab = it })
                         },
                     )
                 }

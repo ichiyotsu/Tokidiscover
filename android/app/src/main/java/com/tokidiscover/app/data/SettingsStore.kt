@@ -21,5 +21,11 @@ class SettingsStore(context: Context) {
         set(v) { prefs.edit().putBoolean("reduce_motion", v).apply() }
     var backdropBlur: Boolean get() = prefs.getBoolean("backdrop_blur", true)
         set(v) { prefs.edit().putBoolean("backdrop_blur", v).apply() }
+    /** New-tab page: show the Speed Dial shortcuts row. */
+    var showSpeedDial: Boolean get() = prefs.getBoolean("ntp_speed_dial", true)
+        set(v) { prefs.edit().putBoolean("ntp_speed_dial", v).apply() }
+    /** New-tab page: show the recently visited list. */
+    var showRecentOnNewTab: Boolean get() = prefs.getBoolean("ntp_recent", true)
+        set(v) { prefs.edit().putBoolean("ntp_recent", v).apply() }
     fun engine(): SearchEngine = runCatching { SearchEngine.valueOf(searchEngine) }.getOrDefault(SearchEngine.Default)
 }

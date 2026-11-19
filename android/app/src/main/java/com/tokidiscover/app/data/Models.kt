@@ -1,4 +1,5 @@
 package com.tokidiscover.app.data
+import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,10 @@ class BrowserTab(
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var progress by mutableStateOf(0)
+    /** Site icon from WebChromeClient.onReceivedIcon; null until the page reports one. */
+    var favicon by mutableStateOf<Bitmap?>(null)
+    /** Page thumbnail captured when the tab was last backgrounded; null until captured. In-memory only. */
+    var thumbnail by mutableStateOf<Bitmap?>(null)
 }
 data class Bookmark(val id: String = UUID.randomUUID().toString(), val title: String, val url: String, val folder: String = "默认", val createdAt: Long = System.currentTimeMillis())
 data class HistoryEntry(val id: String = UUID.randomUUID().toString(), val title: String, val url: String, val visitedAt: Long = System.currentTimeMillis())

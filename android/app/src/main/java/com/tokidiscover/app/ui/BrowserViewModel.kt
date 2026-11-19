@@ -9,18 +9,108 @@ import androidx.lifecycle.AndroidViewModel
 import com.tokidiscover.app.TokiDiscoverApplication
 import com.tokidiscover.app.data.Bookmark
 import com.tokidiscover.app.data.BrowserTab
+import com.tokidiscover.app.data.ClosedTab
 import com.tokidiscover.app.data.DownloadRecord
 import com.tokidiscover.app.data.Downloads
 import com.tokidiscover.app.data.NavResult
+import com.tokidiscover.app.data.TabGroup
+import com.tokidiscover.app.data.TabSnapshot
 import com.tokidiscover.app.data.UrlNormalizer
+import com.tokidiscover.app.data.addTabToGroup
+import com.tokidiscover.app.data.closeTabGroup
+import com.tokidiscover.app.data.createTabGroup
+import com.tokidiscover.app.data.decodeTabGroups
+import com.tokidiscover.app.data.deleteTabGroup
+import com.tokidiscover.app.data.encodeTabGroups
+import com.tokidiscover.app.data.groupOfTab
+import com.tokidiscover.app.data.recordClosedTab
+import com.tokidiscover.app.data.removeTabFromGroup
+import com.tokidiscover.app.data.renameTabGroup
 
 /** Owns the in-memory tab list and library. One WebView per tab is kept by the browser host until the tab closes. */
 class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     val settings get() = getApplication<TokiDiscoverApplication>().settings
     val library get() = getApplication<TokiDiscoverApplication>().library
-    val tabs = mutableStateListOf<BrowserTab>().apply { add(BrowserTab()) }
-    var activeTabId by mutableStateOf(tabs.first().id)
+    val tabs = mutableStateListOf<BrowserTab>()
+    var activeTabId by mutableStateOf("")
         private set
+    /** Tab groups, restored from storage on launch (their tabs are restored with them). */
+    var groups by mutableStateOf<List<TabGroup>>(emptyList())
+        private set
+    /** Tabs closed this session, newest first; private tabs and blank new tabs are not kept. */
+    val recentlyClosed = mutableStateListOf<ClosedTab>()
+    /** Which Library section the menu asked for (0 书签 / 1 历史 / 2 下载). */
+    var librarySection by mutableStateOf(0)
+
+    init {
+        val (savedGroups, snapshots) = decodeTabGroups(library.tabGroupsJson)
+        val restored = snapshots.map {
+            BrowserTab(id = it.tabId, url = it.url, title = it.title, isPrivate = it.isPrivate)
+        }
+        if (restored.isNotEmpty()) {
+            tabs.addAll(restored)
+            activeTabId = restored.first().id
+            groups = savedGroups
+        } else {
+            val tab = BrowserTab()
+            tabs.add(tab)
+            activeTabId = tab.id
+        }
+    }
+
+    private fun saveGroups() {
+        library.tabGroupsJson = encodeTabGroups(
+            groups,
+            tabs.map { TabSnapshot(it.id, it.title, it.url, it.isPrivate) },
+        )
+    }
+
+    fun createGroupForTab(tabId: String): TabGroup? {
+        if (tabs.none { it.id == tabId }) return null
+        val (updated, group) = createTabGroup(groups, "", listOf(tabId))
+        groups = updated
+        saveGroups()
+        return group
+    }
+
+    fun addTabToGroup(tabId: String, groupId: String) {
+        groups = addTabToGroup(groups, groupId, tabId)
+        saveGroups()
+    }
+
+    fun ungroupTab(tabId: String) {
+        val group = groupOfTab(groups, tabId) ?: return
+        groups = removeTabFromGroup(groups, group.id, tabId)
+        saveGroups()
+    }
+
+    fun renameGroup(groupId: String, name: String) {
+        groups = renameTabGroup(groups, groupId, name)
+        saveGroups()
+    }
+
+    fun deleteGroup(groupId: String) {
+        groups = deleteTabGroup(groups, groupId)
+        saveGroups()
+    }
+
+    fun closeGroup(groupId: String) {
+        val (remaining, tabIds) = closeTabGroup(groups, groupId)
+        groups = remaining
+        tabIds.forEach { closeTab(it) }
+        saveGroups()
+    }
+
+    fun closeAllTabs() {
+        tabs.toList().forEach { closeTab(it.id) }
+        groups = emptyList()
+        saveGroups()
+    }
+
+    fun restoreClosedTab(closed: ClosedTab) {
+        recentlyClosed.remove(closed)
+        newTab(isPrivate = closed.isPrivate, url = closed.url)
+    }
     val activeTab: BrowserTab get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
     var bookmarks by mutableStateOf(library.bookmarks)
         private set
@@ -40,14 +130,25 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     fun closeTab(id: String) {
         val index = tabs.indexOfFirst { it.id == id }
         if (index < 0) return
+        val tab = tabs[index]
+        if (!tab.isPrivate && tab.url != UrlNormalizer.NEW_TAB_URL) {
+            val kept = recordClosedTab(
+                recentlyClosed.toList(),
+                ClosedTab(tab.title.ifBlank { tab.url }, tab.url, tab.isPrivate),
+            )
+            recentlyClosed.clear()
+            recentlyClosed.addAll(kept)
+        }
+        groups = groups.map { it.copy(tabIds = it.tabIds - id) }.filter { it.tabIds.isNotEmpty() }
         tabs.removeAt(index)
         if (tabs.isEmpty()) {
-            val tab = BrowserTab()
-            tabs.add(tab)
-            activeTabId = tab.id
+            val fresh = BrowserTab()
+            tabs.add(fresh)
+            activeTabId = fresh.id
         } else if (activeTabId == id) {
             activeTabId = tabs[minOf(index, tabs.lastIndex)].id
         }
+        saveGroups()
     }
 
     fun selectTab(id: String) {
