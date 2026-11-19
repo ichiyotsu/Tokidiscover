@@ -62,7 +62,7 @@ class SemanticTokensTest {
     fun androidMinSdkFollowsTokiUi() {
         val gradle = File("build.gradle.kts").readText()
         assertTrue(gradle.contains("minSdk = 36"))
-        assertTrue(gradle.contains("\"0.1.3\""))
+        assertTrue(gradle.contains("\"0.1.4\""))
     }
 
     private fun read(name: String): String {
